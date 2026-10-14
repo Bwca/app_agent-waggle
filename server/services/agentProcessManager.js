@@ -73,6 +73,12 @@ function killTree(child, signal, agentId) {
  * @property {{ handleEvent: (event: object) => void, handleExit: (code: number|null, sig: string|null) => void } | null} currentTurn
  * @property {TurnAccumulator | null} background - Accumulates events that
  *   arrive while `currentTurn` is null — see handleUnsolicitedEvent.
+ * @property {BackgroundStream | null} [backgroundStream] - The live stream
+ *   the caller opened (see onBackgroundStream) for the unsolicited turn
+ *   `background` is currently accumulating, if any.
+ * @property {BackgroundTask[]} [backgroundTasks] - The CLI's own most
+ *   recently reported list of still-running background tasks — see
+ *   onBackgroundTasksChanged.
  * @property {Promise<void>} queue - Chain of pending/running turns, so two
  *   turns never write to this process's stdin concurrently.
  * @property {string[]} skills - The CLI's own `skills` list from its most
@@ -125,9 +131,39 @@ const backgroundCompactionHandlers = new Map();
 /**
  * Handlers registered via onBackgroundError, one per agent. See that
  * function's docs for what fires them.
- * @type {Map<string, (error: { errorMessage: string }) => void>}
+ * @type {Map<string, (error: { errorMessage: string, streamId: string | null }) => void>}
  */
 const backgroundErrorHandlers = new Map();
+
+/**
+ * @typedef {Object} BackgroundTask
+ * @property {string} id - The CLI's own task_id
+ * @property {string} type - e.g. "local_bash"
+ * @property {string} description - The CLI's own human-readable label
+ */
+
+/**
+ * @typedef {Object} BackgroundStream
+ * @property {string} streamId
+ * @property {(text: string) => void} onChunk
+ * @property {(status: string) => void} onStatus
+ * @property {() => void} discard - Called when the unsolicited turn ends
+ *   without anything to hand to onBackgroundTurn/onBackgroundError (no
+ *   content, or the process died mid-turn), so the caller can tear down
+ *   whatever live UI it opened for it.
+ */
+
+/**
+ * Handlers registered via onBackgroundStream, one per agent.
+ * @type {Map<string, () => BackgroundStream | null>}
+ */
+const backgroundStreamHandlers = new Map();
+
+/**
+ * Handlers registered via onBackgroundTasksChanged, one per agent.
+ * @type {Map<string, (tasks: BackgroundTask[]) => void>}
+ */
+const backgroundTasksHandlers = new Map();
 
 /**
  * @param {ManagedProcess} proc
@@ -555,7 +591,7 @@ export function createTurnAccumulator({ onChunk, onStatus } = {}) {
  * this agnostic of exactly when in an agent's lifecycle its process first
  * comes alive).
  * @param {string} agentId
- * @param {(turn: { text: string, toolCalls: ToolCall[], sessionId: string | null, permissionDenials: import('./agentRunner.js').PermissionDenial[], model: string | null }) => void} handler
+ * @param {(turn: { streamId: string | null, text: string, toolCalls: ToolCall[], sessionId: string | null, permissionDenials: import('./agentRunner.js').PermissionDenial[], model: string | null }) => void} handler
  * @returns {void}
  */
 export function onBackgroundTurn(agentId, handler) {
@@ -604,11 +640,82 @@ export function onBackgroundCompaction(agentId, handler) {
  * One handler per agent; same replace-on-reregister contract as
  * onBackgroundTurn.
  * @param {string} agentId
- * @param {(error: { errorMessage: string }) => void} handler
+ * @param {(error: { errorMessage: string, streamId: string | null }) => void} handler
  * @returns {void}
  */
 export function onBackgroundError(agentId, handler) {
   backgroundErrorHandlers.set(agentId, handler);
+}
+
+/**
+ * Registers the factory called the moment an unsolicited turn (see
+ * onBackgroundTurn) STARTS, rather than only once it ends — returns a
+ * BackgroundStream whose onChunk/onStatus get the same live text/tool-call
+ * feed an explicit turn's callbacks do. Reported live: a background task
+ * finishing could kick off a self-resumed turn running 50+ tool calls over
+ * many minutes, all completely invisible until its final `result` landed,
+ * so the agent looked idle (or hung) the whole time. The returned streamId
+ * is passed back on the matching onBackgroundTurn/onBackgroundError call so
+ * the caller can close the stream it opened; the factory may return null
+ * (e.g. agent no longer in a chat) to skip streaming entirely.
+ *
+ * One handler per agent; same replace-on-reregister contract as
+ * onBackgroundTurn.
+ * @param {string} agentId
+ * @param {() => BackgroundStream | null} factory
+ * @returns {void}
+ */
+export function onBackgroundStream(agentId, factory) {
+  backgroundStreamHandlers.set(agentId, factory);
+}
+
+/**
+ * Registers the handler called whenever an agent's set of still-running
+ * background tasks changes — confirmed directly against the installed CLI:
+ * it emits {"type":"system","subtype":"background_tasks_changed","tasks":
+ * [{task_id,task_type,description,...}]} carrying the COMPLETE current list
+ * (not a delta) both when a task starts and when it finishes (an empty
+ * list), whether or not a turn is in flight at the time. Without surfacing
+ * this, an agent that ends its turn with "I'll wait for that to finish"
+ * looked exactly like one that was done — nothing indicated it was still
+ * waiting on anything. Also fired with [] when the process exits with tasks
+ * outstanding, since they die with it.
+ * @param {string} agentId
+ * @param {(tasks: BackgroundTask[]) => void} handler
+ * @returns {void}
+ */
+export function onBackgroundTasksChanged(agentId, handler) {
+  backgroundTasksHandlers.set(agentId, handler);
+}
+
+/**
+ * Every live agent's non-empty background task list — for catching a
+ * freshly-connected client up (see ws/handler.js's handleConnection).
+ * @returns {Array<{ agentId: string, tasks: BackgroundTask[] }>}
+ */
+export function getAllBackgroundTasks() {
+  return [...processes.values()]
+    .filter((proc) => proc.backgroundTasks?.length)
+    .map((proc) => ({ agentId: proc.agentId, tasks: proc.backgroundTasks }));
+}
+
+/**
+ * Applies a `system/background_tasks_changed` event to a process — see
+ * onBackgroundTasksChanged. Exported for its unit test.
+ * @param {ManagedProcess} proc
+ * @param {{ tasks?: unknown }} event
+ * @returns {void}
+ */
+export function applyBackgroundTasksChanged(proc, event) {
+  const tasks = Array.isArray(event.tasks)
+    ? event.tasks.map((task) => ({
+        id: String(task.task_id ?? ''),
+        type: String(task.task_type ?? ''),
+        description: String(task.description ?? ''),
+      }))
+    : [];
+  proc.backgroundTasks = tasks;
+  backgroundTasksHandlers.get(proc.agentId)?.(tasks);
 }
 
 /**
@@ -667,12 +774,19 @@ export function handleUnsolicitedEvent(proc, event) {
   }
   if (event.type !== 'assistant' && event.type !== 'user' && event.type !== 'result') return;
 
-  if (!proc.background) proc.background = createTurnAccumulator();
+  if (!proc.background) {
+    const stream = backgroundStreamHandlers.get(proc.agentId)?.() ?? null;
+    proc.backgroundStream = stream;
+    proc.background = createTurnAccumulator({ onChunk: stream?.onChunk, onStatus: stream?.onStatus });
+  }
   proc.background.handleEvent(event);
   if (!proc.background.done) return;
 
   const turn = proc.background;
+  const stream = proc.backgroundStream ?? null;
+  const streamId = stream?.streamId ?? null;
   proc.background = null;
+  proc.backgroundStream = null;
   // A `result` with is_error:true (e.g. the session limit still hadn't
   // cleared when this background retry ran) is a failure, not real agent
   // speech — same distinction runOneTurn's own turn.errorMessage check
@@ -681,14 +795,18 @@ export function handleUnsolicitedEvent(proc, event) {
   // failure (e.g. re-arm an auto-continue) without it ever being mistaken
   // for genuine content — see onBackgroundError's docs for why this exists.
   if (turn.errorMessage) {
-    backgroundErrorHandlers.get(proc.agentId)?.({ errorMessage: turn.errorMessage });
+    const errorHandler = backgroundErrorHandlers.get(proc.agentId);
+    if (errorHandler) errorHandler({ errorMessage: turn.errorMessage, streamId });
+    else stream?.discard();
     return;
   }
-  if (!turn.fullText && turn.toolCalls.size === 0) return;
-
   const handler = backgroundTurnHandlers.get(proc.agentId);
-  if (!handler) return;
+  if ((!turn.fullText && turn.toolCalls.size === 0) || !handler) {
+    stream?.discard();
+    return;
+  }
   handler({
+    streamId,
     text: turn.resultText || turn.fullText,
     toolCalls: [...turn.toolCalls.values()],
     sessionId: turn.sessionId,
@@ -720,7 +838,7 @@ function spawnProcess(agent) {
   });
 
   /** @type {ManagedProcess} */
-  const proc = { child, agentId: agent.id, buffer: '', currentTurn: null, background: null, queue: Promise.resolve(), skills: lastKnownSkills.get(agent.id) ?? [] };
+  const proc = { child, agentId: agent.id, buffer: '', currentTurn: null, background: null, backgroundStream: null, backgroundTasks: [], queue: Promise.resolve(), skills: lastKnownSkills.get(agent.id) ?? [] };
 
   child.stdout.setEncoding('utf-8');
   child.stdout.on('data', (chunk) => {
@@ -745,6 +863,9 @@ function spawnProcess(agent) {
         proc.skills = event.skills;
         lastKnownSkills.set(agent.id, event.skills);
       }
+      if (event.type === 'system' && event.subtype === 'background_tasks_changed') {
+        applyBackgroundTasksChanged(proc, event);
+      }
       if (proc.currentTurn) {
         proc.currentTurn.handleEvent(event);
       } else {
@@ -768,6 +889,15 @@ function spawnProcess(agent) {
       if (event) proc.currentTurn?.handleEvent(event);
     }
     proc.currentTurn?.handleExit(code, sig);
+    // An unsolicited turn cut off mid-way (stopped, crashed) never reaches
+    // its `result` — close whatever live stream was opened for it, and
+    // clear any background tasks, which died with the process.
+    if (proc.backgroundStream) {
+      proc.backgroundStream.discard();
+      proc.backgroundStream = null;
+      proc.background = null;
+    }
+    if (proc.backgroundTasks?.length) applyBackgroundTasksChanged(proc, { tasks: [] });
   });
 
   processes.set(agent.id, proc);
