@@ -9,7 +9,7 @@ import { dirname } from 'path';
 import { getChat, getAgent, getAgentChatId, getMessages, addMessage, grantAgentPath, grantAgentToolPattern, setAgentResumeIdIfUnset, recordContextClear, setAgentModel, setAgentUsage, setAgentSessionLimitReset, getUserDisplayName, createScheduledMessage, getScheduledMessages } from '../store/db.js';
 import { parseResponders, extractMentionedAgents, parseSkillInvocation } from '../services/messageRouter.js';
 import { runAgentStream, FILE_PATH_TOOLS, deriveToolPatterns, dedupePermissionDenials } from '../services/agentRunner.js';
-import { killAgent, onBackgroundTurn, onBackgroundCompaction, onBackgroundError } from '../services/agentProcessManager.js';
+import { killAgent, onBackgroundTurn, onBackgroundCompaction, onBackgroundError, onBackgroundStream, onBackgroundTasksChanged, getAllBackgroundTasks } from '../services/agentProcessManager.js';
 import { scheduleTimer } from '../services/scheduler.js';
 import { parseSessionLimitReset } from '../services/sessionLimitReset.js';
 import { t } from '../i18n/t.js';
@@ -175,9 +175,10 @@ const FREE_RELAY_MAX_ROUNDS = 20;
 
 /**
  * An agent's persistent process resumed and finished a turn entirely on its
- * own initiative — no user message and no AGENT_STREAM_START/CHUNK ever
- * preceded it, so the client can't replace an existing streaming bubble the
- * way AGENT_STREAM_END does; it just appends this as a new message. See
+ * own initiative — no user message triggered it. Its live progress was
+ * streamed via the usual AGENT_STREAM_START/CHUNK/STATUS events under
+ * `streamId` (see makeBackgroundStreamFactory); this replaces that bubble
+ * with the persisted message. See
  * agentProcessManager.js's onBackgroundTurn for the mechanism (a backgrounded
  * Bash task finishing is the common case) and makeBackgroundTurnHandler for
  * where this gets built and broadcast.
@@ -187,6 +188,32 @@ const FREE_RELAY_MAX_ROUNDS = 20;
  * @property {string} agentId
  * @property {import('../store/db.js').Message} message
  * @property {import('../services/agentRunner.js').PermissionDenial[]} permissionDenials
+ * @property {string | null} streamId - The live stream makeBackgroundStreamFactory
+ *   opened for this turn while it ran, which this message replaces; null if
+ *   none was opened.
+ */
+
+/**
+ * An agent's set of still-running background tasks (e.g. a backgrounded
+ * Bash command) changed — the complete current list, not a delta; an empty
+ * list means it's no longer waiting on anything. See agentProcessManager.js's
+ * onBackgroundTasksChanged. Also sent once per busy agent to a
+ * newly-connected client (see handleConnection).
+ * @typedef {Object} AgentBackgroundTasksEvent
+ * @property {'AGENT_BACKGROUND_TASKS'} type
+ * @property {string} agentId
+ * @property {import('../services/agentProcessManager.js').BackgroundTask[]} tasks
+ */
+
+/**
+ * A live stream opened for an unsolicited (self-resumed) turn ended without
+ * producing a message to replace it with — no content, or the process was
+ * stopped/died mid-turn. The client just drops the bubble.
+ * @typedef {Object} AgentStreamDiscardEvent
+ * @property {'AGENT_STREAM_DISCARD'} type
+ * @property {string} streamId
+ * @property {string} chatId
+ * @property {string} agentId
  */
 
 /**
@@ -737,13 +764,17 @@ export async function handleUserMessage(event, wss) {
  * @returns {(turn: { text: string, toolCalls: import('../services/agentProcessManager.js').ToolCall[], sessionId: string | null, permissionDenials: import('../services/agentRunner.js').PermissionDenial[], model: string | null }) => Promise<void>}
  */
 function makeBackgroundTurnHandler(agentId, wss) {
-  return async ({ text, toolCalls, permissionDenials, model }) => {
+  return async ({ streamId, text, toolCalls, permissionDenials, model }) => {
     const agent = getAgent(agentId);
     const chatId = getAgentChatId(agentId);
     // Agent was deleted, or removed from every chat, between whenever this
     // background task was kicked off and it actually finishing — nowhere
     // left to report into.
-    if (!agent || !chatId) return;
+    if (!agent || !chatId) {
+      discardBackgroundStream(streamId, wss);
+      return;
+    }
+    if (streamId) activeStreams.delete(streamId);
 
     if (model) {
       const updated = await setAgentModel(agentId, model);
@@ -777,7 +808,89 @@ function makeBackgroundTurnHandler(agentId, wss) {
       agentId,
       message: agentMessage,
       permissionDenials: dedupePermissionDenials(permissionDenials),
+      streamId,
     });
+  };
+}
+
+/**
+ * Builds the factory passed to agentProcessManager's onBackgroundStream for
+ * a given agent: opens a live stream — the exact same activeStreams entry +
+ * AGENT_STREAM_START/CHUNK/STATUS events an explicit turn gets — the moment
+ * the CLI starts a turn on its own, so a long self-resumed turn shows its
+ * progress live instead of looking idle until it finishes (see
+ * onBackgroundStream's docs). Closed by makeBackgroundTurnHandler's
+ * AGENT_BACKGROUND_MESSAGE, or discardBackgroundStream otherwise. Stopping it
+ * kills the agent's process, the only way to interrupt a turn nobody wrote
+ * to stdin; the exit then discards the stream.
+ * @param {string} agentId
+ * @param {WebSocketServer} wss
+ * @returns {() => import('../services/agentProcessManager.js').BackgroundStream | null}
+ */
+function makeBackgroundStreamFactory(agentId, wss) {
+  return () => {
+    const agent = getAgent(agentId);
+    const chatId = getAgentChatId(agentId);
+    if (!agent || !chatId) return null;
+    const streamId = uuidv4();
+    const controller = new AbortController();
+    controller.signal.addEventListener('abort', () => { killAgent(agentId, { immediate: true }); });
+    activeStreams.set(streamId, {
+      controller,
+      chatId,
+      agentId,
+      agentName: agent.name,
+      agentColor: agent.color,
+      startedAt: Date.now(),
+      text: '',
+      statusText: '',
+    });
+    /** @type {AgentStreamStartEvent} */
+    broadcast(wss, { type: 'AGENT_STREAM_START', chatId, agentId, streamId, agentName: agent.name, agentColor: agent.color });
+    log.info({ agentId, chatId, streamId }, 'agent started a turn unprompted');
+    return {
+      streamId,
+      onChunk: (text) => {
+        const stream = activeStreams.get(streamId);
+        if (stream) stream.text += text;
+        broadcast(wss, { type: 'AGENT_STREAM_CHUNK', streamId, chatId, agentId, text });
+      },
+      onStatus: (status) => {
+        const stream = activeStreams.get(streamId);
+        if (stream) stream.statusText = status;
+        broadcast(wss, { type: 'AGENT_STREAM_STATUS', streamId, chatId, agentId, status });
+      },
+      discard: () => discardBackgroundStream(streamId, wss),
+    };
+  };
+}
+
+/**
+ * Closes a background stream (see makeBackgroundStreamFactory) that won't be
+ * replaced by a persisted message. A no-op for a null/already-closed one.
+ * @param {string | null} streamId
+ * @param {WebSocketServer} wss
+ */
+function discardBackgroundStream(streamId, wss) {
+  if (!streamId) return;
+  const stream = activeStreams.get(streamId);
+  if (!stream) return;
+  activeStreams.delete(streamId);
+  /** @type {AgentStreamDiscardEvent} */
+  broadcast(wss, { type: 'AGENT_STREAM_DISCARD', streamId, chatId: stream.chatId, agentId: stream.agentId });
+}
+
+/**
+ * Builds the handler passed to agentProcessManager's onBackgroundTasksChanged
+ * for a given agent — see AgentBackgroundTasksEvent.
+ * @param {string} agentId
+ * @param {WebSocketServer} wss
+ * @returns {(tasks: import('../services/agentProcessManager.js').BackgroundTask[]) => void}
+ */
+function makeBackgroundTasksHandler(agentId, wss) {
+  return (tasks) => {
+    /** @type {AgentBackgroundTasksEvent} */
+    broadcast(wss, { type: 'AGENT_BACKGROUND_TASKS', agentId, tasks });
   };
 }
 
@@ -817,10 +930,11 @@ function makeBackgroundCompactionHandler(agentId, wss) {
  * would get from an explicit turn hitting the same wall.
  * @param {string} agentId
  * @param {WebSocketServer} wss
- * @returns {({ errorMessage: string }) => Promise<void>}
+ * @returns {({ errorMessage: string, streamId: string | null }) => Promise<void>}
  */
 function makeBackgroundErrorHandler(agentId, wss) {
-  return async ({ errorMessage }) => {
+  return async ({ errorMessage, streamId }) => {
+    discardBackgroundStream(streamId, wss);
     const agent = getAgent(agentId);
     const chatId = getAgentChatId(agentId);
     if (!agent || !chatId) return;
@@ -1074,6 +1188,8 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, pri
     onBackgroundTurn(agent.id, makeBackgroundTurnHandler(agent.id, wss));
     onBackgroundCompaction(agent.id, makeBackgroundCompactionHandler(agent.id, wss));
     onBackgroundError(agent.id, makeBackgroundErrorHandler(agent.id, wss));
+    onBackgroundStream(agent.id, makeBackgroundStreamFactory(agent.id, wss));
+    onBackgroundTasksChanged(agent.id, makeBackgroundTasksHandler(agent.id, wss));
 
     /** @type {AgentStreamStartEvent} */
     broadcast(wss, {
@@ -1411,5 +1527,9 @@ export function handleConnection(ws, _req, wss) {
   // every other connected client already has these streams live.
   for (const snapshot of buildActiveStreamSnapshot()) {
     ws.send(JSON.stringify(snapshot));
+  }
+  // Same catch-up for agents waiting on a background task between turns.
+  for (const { agentId, tasks } of getAllBackgroundTasks()) {
+    ws.send(JSON.stringify({ type: 'AGENT_BACKGROUND_TASKS', agentId, tasks }));
   }
 }
