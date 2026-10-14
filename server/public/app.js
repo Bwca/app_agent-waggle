@@ -495,6 +495,16 @@ function agentDisplayColor(hex) {
 /** @type {Record<string, StreamingEntry>} keyed by streamId */
 const streamingEntries = {};
 
+/**
+ * Each agent's still-running background tasks (e.g. a backgrounded Bash
+ * command), as last reported by an AGENT_BACKGROUND_TASKS event — an agent
+ * with none simply has no entry. Shown as a badge in the agent panel so an
+ * agent that ended its turn with "I'll wait for that to finish" doesn't look
+ * exactly like one that's done.
+ * @type {Map<string, { id: string, type: string, description: string }[]>}
+ */
+const backgroundTasksByAgentId = new Map();
+
 /** @type {Attachment[]} pending attachments for the message currently being composed */
 let pendingAttachments = [];
 
@@ -1083,8 +1093,14 @@ function handleServerEvent(event) {
     case 'AGENT_STREAM_ERROR':
       onStreamError(event);
       break;
+    case 'AGENT_STREAM_DISCARD':
+      onStreamDiscard(event);
+      break;
     case 'AGENT_BACKGROUND_MESSAGE':
       onAgentBackgroundMessage(event);
+      break;
+    case 'AGENT_BACKGROUND_TASKS':
+      onAgentBackgroundTasks(event);
       break;
     case 'AGENT_UPDATED':
       onAgentUpdated(/** @type {Agent} */ (event.agent));
@@ -1383,13 +1399,16 @@ function onStreamEnd({ streamId, chatId, message, agentId, permissionDenials, st
  * An agent's persistent process resumed and reported on its own — most
  * commonly a backgrounded Bash task finishing — without any new user
  * message to trigger it (see agentProcessManager.js's onBackgroundTurn on
- * the server for the mechanism). Unlike onStreamEnd, there's never an
- * existing streaming bubble to replace here: nothing client-side was
- * watching for this to start, so it always appends fresh.
- * @param {{ chatId: string, agentId: string, message: Message,
+ * the server for the mechanism). Its live progress streamed into a normal
+ * streaming bubble under `streamId`, which is dropped here in favor of the
+ * persisted message.
+ * @param {{ chatId: string, agentId: string, message: Message, streamId?: string | null,
  *           permissionDenials: import('../services/agentRunner.js').PermissionDenial[] }} event
  */
-function onAgentBackgroundMessage({ chatId, agentId, message, permissionDenials }) {
+function onAgentBackgroundMessage({ chatId, agentId, message, permissionDenials, streamId }) {
+  // The live bubble this turn streamed into while it ran (if any) — replaced
+  // by the persisted message appended below.
+  if (streamId) onStreamDiscard({ streamId });
   if (chatId !== activeChatId) {
     unreadChatIds.add(chatId);
     renderChatList();
@@ -1402,6 +1421,44 @@ function onAgentBackgroundMessage({ chatId, agentId, message, permissionDenials 
   }
   flagUnseenOutsideFocus(agentId);
   scrollToBottom();
+}
+
+/**
+ * A live stream for a turn the agent started on its own ended with nothing
+ * to replace it — drop the bubble (see ws/handler.js's AgentStreamDiscardEvent).
+ * @param {{ streamId: string }} event
+ */
+function onStreamDiscard({ streamId }) {
+  const entry = streamingEntries[streamId];
+  if (!entry) return;
+  if (entry.timerId) clearInterval(entry.timerId);
+  entry.el?.remove();
+  delete streamingEntries[streamId];
+}
+
+/**
+ * @param {{ agentId: string, tasks: { id: string, type: string, description: string }[] }} event
+ */
+function onAgentBackgroundTasks({ agentId, tasks }) {
+  if (tasks.length) backgroundTasksByAgentId.set(agentId, tasks);
+  else backgroundTasksByAgentId.delete(agentId);
+  renderAgentPanel();
+}
+
+/**
+ * Agent-panel badge for an agent's still-running background tasks, or ''
+ * if it has none — see backgroundTasksByAgentId.
+ * @param {Agent} agent
+ * @returns {string}
+ */
+function renderBackgroundTasksBadge(agent) {
+  const tasks = backgroundTasksByAgentId.get(agent.id);
+  if (!tasks?.length) return '';
+  const label = tasks.length === 1
+    ? t('agent.backgroundTasksBadgeOne', { description: tasks[0].description })
+    : t('agent.backgroundTasksBadgeMany', { count: tasks.length });
+  const title = t('agent.backgroundTasksBadgeTitle', { list: tasks.map((task) => `• ${task.description}`).join('\n') });
+  return `<span class="agent-bg-tasks" data-testid="agent-bg-tasks" title="${escHtml(title)}">⚙️ ${escHtml(label)}</span>`;
 }
 
 /**
@@ -3031,6 +3088,7 @@ function renderAgentPanel() {
         <span class="agent-dir" title="${escHtml(agent.workingDir)}">${escHtml(shortDir(agent.workingDir))}</span>
         ${agent.model ? `<span class="agent-model" data-testid="agent-model" title="${t('agent.modelTitle', { model: escHtml(agent.model) })}">🧠 ${escHtml(formatModelLabel(agent.model))}</span>` : ''}
         ${renderUsageBadge(agent)}
+        ${renderBackgroundTasksBadge(agent)}
         ${isSessionLimited(agent) ? `<span class="agent-session-limit" data-testid="agent-session-limit" title="${t('agent.sessionLimitBadgeTitle')}">⏳ ${t('agent.sessionLimitBadgeLabel', { time: fmtScheduledTime(agent.sessionLimitResetAt) })}</span>` : ''}
         ${agent.note ? `<span class="agent-note" data-testid="agent-note" title="${escHtml(agent.note)}">📝 ${escHtml(agent.note)}</span>` : ''}
         ${agent.resumeId ? `<button class="agent-session-btn" data-testid="agent-session-btn" title="${t('agent.copySessionTitle', { resumeId: escHtml(agent.resumeId) })}">⧉ ${agent.resumeId.slice(0, 8)}…</button>` : ''}
