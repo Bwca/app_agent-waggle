@@ -9,7 +9,7 @@ import { dirname } from 'path';
 import { getChat, getAgent, getAgentChatId, getMessages, addMessage, grantAgentPath, grantAgentToolPattern, setAgentResumeIdIfUnset, recordContextClear, setAgentModel, setAgentUsage, setAgentSessionLimitReset, getUserDisplayName, createScheduledMessage, getScheduledMessages } from '../store/db.js';
 import { parseResponders, extractMentionedAgents, parseSkillInvocation } from '../services/messageRouter.js';
 import { runAgentStream, FILE_PATH_TOOLS, deriveToolPatterns, dedupePermissionDenials } from '../services/agentRunner.js';
-import { killAgent, onBackgroundTurn, onBackgroundCompaction, onBackgroundError, onBackgroundStream, onBackgroundTasksChanged, getAllBackgroundTasks } from '../services/agentProcessManager.js';
+import { killAgent, onBackgroundTurn, onBackgroundCompaction, onBackgroundError, onBackgroundUsage, onBackgroundStream, onBackgroundTasksChanged, getAllBackgroundTasks } from '../services/agentProcessManager.js';
 import { scheduleTimer } from '../services/scheduler.js';
 import { parseSessionLimitReset } from '../services/sessionLimitReset.js';
 import { t } from '../i18n/t.js';
@@ -950,6 +950,34 @@ function makeBackgroundErrorHandler(agentId, wss) {
 }
 
 /**
+ * Builds the handler passed to agentProcessManager's onBackgroundUsage for a
+ * given agent: records a self-resumed turn's spend exactly like an explicit
+ * turn's (setAgentUsage + AGENT_UPDATED), and logs it the same way the
+ * 'turn ended'/'turn errored' lines do, so background spend shows up in
+ * both the 💰 badge and the log instead of neither.
+ * @param {string} agentId
+ * @param {WebSocketServer} wss
+ * @returns {(usage: import('../services/agentProcessManager.js').BackgroundUsage) => Promise<void>}
+ */
+function makeBackgroundUsageHandler(agentId, wss) {
+  return async ({ usage, contextTokens, totalCostUsd, durationMs, isError }) => {
+    log.info(
+      {
+        agentId,
+        chatId: getAgentChatId(agentId),
+        ...(usage ?? {}),
+        totalCostUsd,
+        durationMs,
+        isError,
+      },
+      'background turn ended'
+    );
+    const updated = await setAgentUsage(agentId, { totalCostUsd, contextTokens });
+    if (updated) broadcast(wss, { type: 'AGENT_UPDATED', agent: updated });
+  };
+}
+
+/**
  * Scheduled-message content that nudges a single agent to continue once its
  * session limit resets. @-targeted (not a bare "please continue") so
  * parseResponders resolves it to just that agent at fire time, not a
@@ -1185,6 +1213,7 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, pri
     onBackgroundTurn(agent.id, makeBackgroundTurnHandler(agent.id, wss));
     onBackgroundCompaction(agent.id, makeBackgroundCompactionHandler(agent.id, wss));
     onBackgroundError(agent.id, makeBackgroundErrorHandler(agent.id, wss));
+    onBackgroundUsage(agent.id, makeBackgroundUsageHandler(agent.id, wss));
     onBackgroundStream(agent.id, makeBackgroundStreamFactory(agent.id, wss));
     onBackgroundTasksChanged(agent.id, makeBackgroundTasksHandler(agent.id, wss));
 

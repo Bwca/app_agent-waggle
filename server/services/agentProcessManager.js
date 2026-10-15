@@ -138,6 +138,23 @@ const backgroundCompactionHandlers = new Map();
 const backgroundErrorHandlers = new Map();
 
 /**
+ * @typedef {Object} BackgroundUsage
+ * @property {TurnUsage | null} usage
+ * @property {number | null} contextTokens
+ * @property {number | null} totalCostUsd - This turn's own cost (see
+ *   withPerTurnCost).
+ * @property {number | null} durationMs
+ * @property {boolean} isError
+ */
+
+/**
+ * Handlers registered via onBackgroundUsage, one per agent. See that
+ * function's docs for what fires them.
+ * @type {Map<string, (usage: BackgroundUsage) => void>}
+ */
+const backgroundUsageHandlers = new Map();
+
+/**
  * @typedef {Object} BackgroundTask
  * @property {string} id - The CLI's own task_id
  * @property {string} type - e.g. "local_bash"
@@ -701,6 +718,25 @@ export function onBackgroundError(agentId, handler) {
 }
 
 /**
+ * Registers the handler to call with the token/cost accounting of every
+ * turn this agent's process ran ENTIRELY ON ITS OWN (see onBackgroundTurn),
+ * whatever its outcome: a real reply, an error (onBackgroundError), or
+ * nothing worth posting. Kept separate from those handlers because the
+ * spend is real in all three cases, including the one that reaches neither.
+ * Before this existed, a self-resumed turn's spend was never recorded, so
+ * an agent running long background work looked far cheaper than it was.
+ *
+ * One handler per agent; same replace-on-reregister contract as
+ * onBackgroundTurn.
+ * @param {string} agentId
+ * @param {(usage: BackgroundUsage) => void} handler
+ * @returns {void}
+ */
+export function onBackgroundUsage(agentId, handler) {
+  backgroundUsageHandlers.set(agentId, handler);
+}
+
+/**
  * Registers the factory called the moment an unsolicited turn (see
  * onBackgroundTurn) STARTS, rather than only once it ends — returns a
  * BackgroundStream whose onChunk/onStatus get the same live text/tool-call
@@ -840,6 +876,15 @@ export function handleUnsolicitedEvent(proc, event) {
   const streamId = stream?.streamId ?? null;
   proc.background = null;
   proc.backgroundStream = null;
+  if (turn.usage || turn.totalCostUsd != null) {
+    backgroundUsageHandlers.get(proc.agentId)?.({
+      usage: turn.usage,
+      contextTokens: turn.contextTokens,
+      totalCostUsd: turn.totalCostUsd,
+      durationMs: turn.durationMs,
+      isError: !!turn.errorMessage,
+    });
+  }
   // A `result` with is_error:true (e.g. the session limit still hadn't
   // cleared when this background retry ran) is a failure, not real agent
   // speech — same distinction runOneTurn's own turn.errorMessage check
