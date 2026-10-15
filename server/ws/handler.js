@@ -581,12 +581,7 @@ export function buildPromptBlocks(agent, chat, members, newMessage, priorMessage
 /**
  * Handles an incoming USER_MESSAGE event.
  * Saves the user message, determines responders, then runs agents sequentially.
- * @param {UserMessageEvent & { skipRelay?: boolean }} event - `skipRelay` is
- *   set by fireScheduledMessage (services/scheduler.js) for an auto-continue
- *   "please continue" message (see ScheduledMessage.isAutoContinue's docs in
- *   store/db.js) — it's a private nudge back to the one agent that hit a
- *   session limit, not new team information, so its reply shouldn't be
- *   allowed to kick off a freeRelay cascade through the rest of the chat.
+ * @param {UserMessageEvent} event
  * @param {WebSocketServer} wss
  * @returns {Promise<{ userMessage: import('../store/db.js').Message | null, replies: import('../store/db.js').Message[] }>}
  *   `replies` is every agent Message this call produced, flattened across
@@ -598,7 +593,7 @@ export function buildPromptBlocks(agent, chat, members, newMessage, priorMessage
  *   forgetting, without needing a WS client of its own.
  */
 export async function handleUserMessage(event, wss) {
-  const { chatId, content, attachments = [], skipRelay = false } = event;
+  const { chatId, content, attachments = [] } = event;
 
   const chat = getChat(chatId);
   if (!chat) return { userMessage: null, replies: [] };
@@ -665,10 +660,12 @@ export async function handleUserMessage(event, wss) {
   //     ceiling against a genuinely unbounded two-agent back-and-forth
   //     burning cost/time indefinitely.
   //
-  // Skipped entirely for an auto-continue message (see this function's own
-  // docs) — its reply staying private to the one agent it woke up is the
-  // whole point.
-  if (skipRelay) return { userMessage, replies: allReplies };
+  // This applies to an auto-continue "please continue" reply too. An
+  // earlier version skipped relay for those entirely, but the woken agent's
+  // reply is usually it resuming real work, and its @mentions are real
+  // hand-offs. Reported live: three agents woken by the same reset each
+  // @mentioned teammates ("@Claus please commit"), and every one of those
+  // mentions was silently dropped, so the work stalled.
   let roundMessages = respondedMessages;
   let round = 0;
   while (roundMessages.size > 0) {

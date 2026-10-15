@@ -240,13 +240,8 @@ function transaction(fn) {
  * @property {boolean} [isAutoContinue] - True for a "please continue" message
  *   maybeScheduleAutoContinue (ws/handler.js) created after a session-limit
  *   error, as opposed to one a user scheduled by hand via the 🕐 panel.
- *   fireScheduledMessage (services/scheduler.js) uses this to skip the relay
- *   step for the resulting reply — it's a private nudge back to the one
- *   agent that hit the limit, not new information the rest of a
- *   freeRelay chat's team needs to react to. Reported live: without this,
- *   a multi-agent freeRelay chat's auto-continue cascaded through the whole
- *   team's @mentions, each an expensive resumed turn, re-exhausting a
- *   freshly-reset session limit within minutes.
+ *   initScheduler (services/scheduler.js) uses this to leave an overdue one
+ *   un-armed at startup instead of firing it late.
  */
 
 /**

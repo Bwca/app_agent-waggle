@@ -4,8 +4,7 @@
  * USER_MESSAGE — @mention targeting (a specific agent, or everyone) is
  * resolved fresh at fire time by handleUserMessage/parseResponders, exactly
  * as it would be for a message typed live, so there's no separate
- * "who responds" logic here. The one difference: an auto-continue message
- * (row.isAutoContinue) suppresses the relay step — see fireScheduledMessage.
+ * "who responds" logic here.
  */
 
 import {
@@ -57,11 +56,6 @@ export async function fireScheduledMessage(id, wss) {
       chatId: row.chatId,
       content: row.content,
       attachments: row.attachments,
-      // See ScheduledMessage.isAutoContinue's docs (store/db.js) and
-      // handleUserMessage's skipRelay param — an auto-continue "please
-      // continue" is a private nudge to one agent, not information that
-      // should fan out through the rest of a freeRelay chat's team.
-      skipRelay: row.isAutoContinue,
     },
     wss
   );
@@ -135,9 +129,8 @@ export async function cancelScheduledMessage(id) {
  * right call — the user asked for that content to go out, late or not.
  * But an auto-continue's sendAt targets a specific session-limit reset
  * time; once the server's been down past it, that assumption is stale and
- * unverifiable, and firing it automatically risks re-triggering the exact
- * relay cascade it exists to recover from (see fix(chats) in
- * ws/handler.js's skipRelay). Silently deleting it was the old behaviour,
+ * unverifiable, and firing it automatically risks waking an agent into a
+ * limit that hasn't actually reset, or long after its work moved on. Silently deleting it was the old behaviour,
  * but that took the decision away from the user entirely. Instead, the row
  * is simply left in the DB with no timer: getScheduledMessages still
  * returns it, so the next time the user opens that chat the frontend's
