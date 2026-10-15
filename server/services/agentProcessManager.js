@@ -83,6 +83,9 @@ function killTree(child, signal, agentId) {
  *   onBackgroundTasksChanged.
  * @property {Promise<void>} queue - Chain of pending/running turns, so two
  *   turns never write to this process's stdin concurrently.
+ * @property {Promise<void> | null} retiring - Set once killAgent has been
+ *   called on this process, resolving when it has actually exited. A
+ *   retiring process takes no new turns — see isAvailable.
  * @property {string[]} skills - The CLI's own `skills` list from its most
  *   recent `system/init` event — the built-in/marketplace/plugin skills
  *   this specific process can actually invoke via "/name" (a superset of
@@ -206,6 +209,23 @@ const AUTOCOMPACT_WINDOW = process.env.APP_AUTOCOMPACT || '200k';
  */
 function isAlive(proc) {
   return proc.child.exitCode === null && proc.child.signalCode === null;
+}
+
+/**
+ * Whether a process can take a new turn: alive, and not on its way out.
+ * Killing isn't instant — a `claude` process takes ~0.5s to exit after
+ * SIGTERM — and killAgent's callers often don't wait for it (removing an
+ * agent from a chat responds straight away). Reported via a failing E2E
+ * test: an agent moved from one chat to another had its first turn in the
+ * new chat written to the old chat's still-exiting process, which then
+ * died mid-turn ("exited with code 143"). Had it answered first, it would
+ * have answered with the old chat's session, since it was spawned with
+ * that chat's --resume.
+ * @param {ManagedProcess} proc
+ * @returns {boolean}
+ */
+function isAvailable(proc) {
+  return isAlive(proc) && !proc.retiring;
 }
 
 /**
@@ -936,7 +956,7 @@ function spawnProcess(agent) {
   });
 
   /** @type {ManagedProcess} */
-  const proc = { child, agentId: agent.id, buffer: '', costSoFar: 0, currentTurn: null, background: null, backgroundStream: null, backgroundTasks: [], queue: Promise.resolve(), skills: lastKnownSkills.get(agent.id) ?? [] };
+  const proc = { child, agentId: agent.id, buffer: '', costSoFar: 0, currentTurn: null, retiring: null, background: null, backgroundStream: null, backgroundTasks: [], queue: Promise.resolve(), skills: lastKnownSkills.get(agent.id) ?? [] };
 
   child.stdout.setEncoding('utf-8');
   child.stdout.on('data', (chunk) => {
@@ -1015,6 +1035,10 @@ function spawnProcess(agent) {
 export function spawnForAgent(agent) {
   try {
     const existing = processes.get(agent.id);
+    if (existing?.retiring) {
+      existing.retiring.then(() => spawnForAgent(agent));
+      return;
+    }
     if (existing && isAlive(existing)) return;
     if (!existsSync(agent.workingDir)) return;
     spawnProcess(agent);
@@ -1039,7 +1063,12 @@ export function runTurn(agent, content, { onChunk, onStatus, signal }) {
   }
 
   let proc = processes.get(agent.id);
-  if (!proc || !isAlive(proc)) {
+  // Wait for a retiring process to exit, then start over against a fresh
+  // spawn — never queue onto it (see isAvailable).
+  if (proc?.retiring) {
+    return proc.retiring.then(() => runTurn(agent, content, { onChunk, onStatus, signal }));
+  }
+  if (!proc || !isAvailable(proc)) {
     proc = spawnProcess(agent);
   }
 
@@ -1208,22 +1237,31 @@ function runOneTurn(proc, content, { onChunk, onStatus, signal }) {
 export function killAgent(agentId, { immediate = false } = {}) {
   const proc = processes.get(agentId);
   if (!proc) return Promise.resolve();
+  if (proc.retiring) {
+    // Already on its way out; an immediate kill (stop, shutdown) still
+    // shouldn't wait for a turn that a graceful kill is waiting out.
+    if (immediate && isAlive(proc)) killTree(proc.child, 'SIGTERM', agentId);
+    return proc.retiring;
+  }
 
+  // Kills this specific process, not whatever the registry holds by then:
+  // once it's retiring, any newer process for this agent was spawned after
+  // the kill was asked for, with current flags and session, so there's
+  // nothing about it to undo. If this one already exited on its own while
+  // waiting, there's nothing to do.
   const sendKill = () => {
-    // Re-read from the registry rather than closing over `proc`: while we
-    // were waiting on its queue, that process could already have exited on
-    // its own (crash) and been replaced by a freshly-spawned one — the
-    // thing we actually want gone is whatever this agent is CURRENTLY
-    // running, not the specific object captured above.
-    const live = processes.get(agentId);
-    if (!live || !isAlive(live)) return Promise.resolve();
+    if (!isAlive(proc)) return Promise.resolve();
     return new Promise((resolve) => {
-      live.child.once('exit', () => resolve());
-      killTree(live.child, 'SIGTERM', agentId);
+      proc.child.once('exit', () => resolve());
+      killTree(proc.child, 'SIGTERM', agentId);
     });
   };
 
-  return immediate ? sendKill() : proc.queue.then(sendKill, sendKill);
+  // The exit handler already unregisters it; this just guarantees it, since
+  // runTurn/spawnForAgent wait on `retiring` and then look again.
+  const unregister = () => { if (processes.get(agentId) === proc) processes.delete(agentId); };
+  proc.retiring = (immediate ? sendKill() : proc.queue.then(sendKill, sendKill)).then(unregister);
+  return proc.retiring;
 }
 
 /**
