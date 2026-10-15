@@ -166,6 +166,22 @@ const backgroundStreamHandlers = new Map();
 const backgroundTasksHandlers = new Map();
 
 /**
+ * Context size, in the CLI's own `--autocompact` syntax, at which an agent's
+ * session gets summarized. Overridable via APP_AUTOCOMPACT (the CLI accepts
+ * 'auto', or 100k–1M, e.g. "300k" or "300000").
+ *
+ * Deliberately not 'auto': observed live, 'auto' only compacts near the
+ * model's full window (one agent compacted at 967,457 → 11,406 tokens), so
+ * sessions sat at 400k–800k between compactions. Every request in a turn
+ * re-reads that whole context, and a turn that resumes after the prompt
+ * cache expired re-writes all of it first. Four such agents nudged at once
+ * used up a freshly-reset session limit before any of them finished a
+ * reply. A smaller window keeps each request cheap at the cost of
+ * summarizing more often.
+ */
+const AUTOCOMPACT_WINDOW = process.env.APP_AUTOCOMPACT || '200k';
+
+/**
  * @param {ManagedProcess} proc
  * @returns {boolean}
  */
@@ -186,14 +202,10 @@ function buildArgs(agent) {
     '--output-format=stream-json',
     '--verbose',
     // Lets the CLI summarize its own older context once a resumed session's
-    // cache grows large, instead of every turn paying to re-read a
-    // multi-million-token history in full (observed directly: a long-running
-    // multi-day agent's cacheReadInputTokens climbing into the millions per
-    // turn, exhausting a freshly-reset session limit within minutes of
-    // resuming — see maybeScheduleAutoContinue's docs in ws/handler.js for
-    // the other half of that incident). Automatic and lossy-but-graceful,
-    // unlike dropping resumeId outright (which forgets everything).
-    '--autocompact', 'auto',
+    // cache grows past AUTOCOMPACT_WINDOW, instead of every request paying
+    // to re-read a huge history in full. Lossy-but-graceful, unlike dropping
+    // resumeId outright (which forgets everything).
+    '--autocompact', AUTOCOMPACT_WINDOW,
   ];
   if (agent.dangerouslySkipPermissions) {
     args.push('--dangerously-skip-permissions');
