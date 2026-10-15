@@ -184,7 +184,7 @@ export default function createAgentsRouter(wss) {
    * and `--resume`s, so no chat history is lost. Some process state (notably
    * which MCP connectors/servers are authorized) is read fresh only once, at
    * spawn time, and never re-read for that process's lifetime — see
-   * agentProcessManager.js's looksLikeMcpAuthFailure docs. This gives a way to
+   * providers/claude.js's looksLikeMcpAuthFailure docs. This gives a way to
    * pick up such changes (e.g. a connector authorized mid-session) for one
    * agent without restarting the whole server.
    */

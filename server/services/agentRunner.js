@@ -135,7 +135,7 @@ export function dedupePermissionDenials(denials) {
  * @property {boolean} wasLocalCommand - True if the `claude` CLI's own
  *   local-command dispatcher (not this project's skill mechanism)
  *   intercepted this turn before the model saw it — see
- *   agentProcessManager.js's createTurnAccumulator and
+ *   providers/claude.js's createTurnAccumulator and
  *   db.js's Message.isLocalCommandOnly for why callers need this.
  * @property {boolean} contextCleared - True if this turn was a bare
  *   "/clear" the CLI's own local-command dispatcher intercepted — a
@@ -143,7 +143,7 @@ export function dedupePermissionDenials(denials) {
  *   message; a "system"/"conversation_reset" event instead), and one that
  *   genuinely rotates `sessionId` to a brand-new CLI session rather than
  *   just intercepting a turn within the existing one. See
- *   agentProcessManager.js's createTurnAccumulator and
+ *   providers/claude.js's createTurnAccumulator and
  *   store/db.js's recordContextClear for why callers need this distinct
  *   from wasLocalCommand.
  * @property {import('./agentProcessManager.js').TurnUsage | null} usage - Token
@@ -160,7 +160,7 @@ export function dedupePermissionDenials(denials) {
  * @property {{ trigger: 'auto' | 'manual', preTokens: number | null, postTokens: number | null }[]} compactions -
  *   Every context-compaction the CLI's own --autocompact (or a manual
  *   /compact) reported during this turn — see
- *   agentProcessManager.js's createTurnAccumulator. Usually empty.
+ *   providers/claude.js's createTurnAccumulator. Usually empty.
  */
 
 /**

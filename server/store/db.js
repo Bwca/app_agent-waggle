@@ -94,7 +94,7 @@ function transaction(fn) {
  * @property {string} [model] - The real model ID the CLI reported actually
  *   running this agent's most recent turn (e.g. "claude-sonnet-5"), captured
  *   from that turn's own stream-json `assistant` events — see
- *   agentProcessManager.js's createTurnAccumulator. Purely observational —
+ *   providers/claude.js's createTurnAccumulator. Purely observational —
  *   read-only from this app's own perspective, never written by a user
  *   action — reflecting whatever the CLI actually ran on, whether that's its
  *   own default resolution or `modelOverride` below. Undefined until the
@@ -135,12 +135,12 @@ function transaction(fn) {
  *   this agent's most recent turn that made one — i.e. what every request
  *   in its next turn will have to read back, before any new output.
  *   Undefined until the first real turn. See createTurnAccumulator's
- *   contextTokens docs (agentProcessManager.js) for why it isn't the
+ *   contextTokens docs (providers/index.js) for why it isn't the
  *   `result` event's summed totals.
  *   The number that answers "is this session's cache big enough that I
  *   should consider starting fresh (remove + re-add the agent) instead of
  *   letting it keep growing?" — see --autocompact in
- *   agentProcessManager.js's buildArgs for the automatic mitigation, and
+ *   providers/claude.js's buildArgs for the automatic mitigation, and
  *   this field for the manual decision.
  * @property {string} [sessionLimitResetAt] - ISO 8601 instant when Claude's
  *   own session-limit message (e.g. "You've hit your session limit · resets
