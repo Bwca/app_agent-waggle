@@ -10,7 +10,8 @@ import { spawn } from 'child_process';
 import { existsSync } from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import { getAgents, getAgent, getAgentChatId, getChat, createAgent, updateAgent, deleteAgent } from '../store/db.js';
-import { verifyClaudeBinAvailable } from '../services/agentRunner.js';
+import { verifyProviderAvailable } from '../services/agentRunner.js';
+import { providerForAgent } from '../services/providers/index.js';
 import { killAgent, getAgentSkills, spawnForAgent } from '../services/agentProcessManager.js';
 import { listAgentCommands, mergeSkills } from '../services/commands.js';
 import { postAgentRemovedNote } from '../ws/handler.js';
@@ -78,7 +79,7 @@ export default function createAgentsRouter(wss) {
     if (!existsSync(workingDir)) {
       return res.status(400).json({ error: t('errors.agentDirNotFound', { path: workingDir }) });
     }
-    const verified = await verifyClaudeBinAvailable();
+    const verified = await verifyProviderAvailable();
     if (!verified.ok) {
       return res.status(400).json({ error: t('errors.agentVerifyFailed', { message: verified.error }) });
     }
@@ -128,13 +129,13 @@ export default function createAgentsRouter(wss) {
     if (!existing) return res.status(404).json({ error: t('errors.agentNotFound') });
 
     // Only re-verify if workingDir is actually changing — resumeId isn't
-    // checked at all (see verifyClaudeBinAvailable's docs), and renaming or
+    // checked at all (see verifyProviderAvailable's docs), and renaming or
     // recoloring an already-working agent shouldn't touch the filesystem.
     if (workingDir !== undefined && workingDir !== existing.workingDir) {
       if (!existsSync(workingDir)) {
         return res.status(400).json({ error: t('errors.agentDirNotFound', { path: workingDir }) });
       }
-      const verified = await verifyClaudeBinAvailable();
+      const verified = await verifyProviderAvailable(providerForAgent(existing));
       if (!verified.ok) {
         return res.status(400).json({ error: t('errors.agentVerifyFailed', { message: verified.error }) });
       }

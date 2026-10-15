@@ -719,7 +719,7 @@ function runOneTurn(proc, content, { onChunk, onStatus, signal }) {
         // moment later, and the caller would be left with `finish()`'s
         // empty-string "success" instead of ever seeing the real error.
         if (turn.errorMessage) {
-          fail(t('errors.claudeExecutionError', { message: turn.errorMessage }));
+          fail(t('errors.agentExecutionError', { provider: provider.displayName, message: turn.errorMessage }));
           return;
         }
         if (provider.looksLikeAuthFailure(turn.resultText)) {
@@ -739,7 +739,7 @@ function runOneTurn(proc, content, { onChunk, onStatus, signal }) {
         if (code !== 0 && !turn.resultText && !turn.fullText) {
           settled = true;
           if (signal) signal.removeEventListener('abort', killForStop);
-          reject(new Error(t('errors.claudeExitCode', { code })));
+          reject(new Error(t('errors.agentExitCode', { provider: provider.displayName, code })));
           return;
         }
         finish();
