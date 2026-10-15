@@ -390,6 +390,14 @@ function describeToolUse({ name, input }) {
  *   (a process crash mid-turn). This is what onward logging (ws/handler.js's
  *   'turn ended'/'turn errored') uses to make token burn per agent/turn
  *   debuggable after the fact, instead of having to guess from timestamps.
+ * @property {number | null} contextTokens - input + cache-creation +
+ *   cache-read tokens of this turn's LAST model request, from that
+ *   `assistant` event's own `message.usage` — i.e. how big the session's
+ *   context actually is now. Not derivable from `usage` above: the `result`
+ *   event's totals are summed across every request in the turn (one per
+ *   tool-call step, each re-reading the whole context), so a 20-step turn
+ *   on a 1M context reports ~20M. Null for a turn with no real assistant
+ *   event (a pure local command, or an error before any request).
  * @property {number | null} totalCostUsd - The CLI's own cost estimate for
  *   this turn, same caveats as `usage`.
  * @property {number | null} durationMs - Wall-clock turn duration per the
@@ -440,6 +448,7 @@ export function createTurnAccumulator({ onChunk, onStatus } = {}) {
     contextCleared: false,
     errorMessage: null,
     usage: null,
+    contextTokens: null,
     totalCostUsd: null,
     durationMs: null,
     model: null,
@@ -466,6 +475,11 @@ export function createTurnAccumulator({ onChunk, onStatus } = {}) {
       // Message.isLocalCommandOnly.
       if (event.type === 'assistant' && event.message?.model === '<synthetic>') turn.wasLocalCommand = true;
       else if (event.type === 'assistant' && typeof event.message?.model === 'string') turn.model = event.message.model;
+
+      if (event.type === 'assistant' && event.message?.model !== '<synthetic>' && event.message?.usage) {
+        const u = event.message.usage;
+        turn.contextTokens = (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0);
+      }
 
       if (event.type === 'assistant' && Array.isArray(event.message?.content)) {
         // Confirmed live against the real CLI: a turn with "text, tool call,
@@ -944,7 +958,7 @@ export function spawnForAgent(agent) {
  * @param {import('../store/db.js').Agent} agent
  * @param {import('./agentRunner.js').ContentBlock[]} content
  * @param {{ onChunk: (text: string) => void, onStatus?: (status: string) => void, signal?: AbortSignal }} options
- * @returns {Promise<{ text: string, permissionDenials: import('./agentRunner.js').PermissionDenial[], sessionId: string | null, stopped: boolean, toolCalls: ToolCall[], wasLocalCommand: boolean, contextCleared: boolean, usage: TurnUsage | null, totalCostUsd: number | null, durationMs: number | null, model: string | null, compactions: { trigger: 'auto' | 'manual', preTokens: number | null, postTokens: number | null }[] }>}
+ * @returns {Promise<{ text: string, permissionDenials: import('./agentRunner.js').PermissionDenial[], sessionId: string | null, stopped: boolean, toolCalls: ToolCall[], wasLocalCommand: boolean, contextCleared: boolean, usage: TurnUsage | null, contextTokens: number | null, totalCostUsd: number | null, durationMs: number | null, model: string | null, compactions: { trigger: 'auto' | 'manual', preTokens: number | null, postTokens: number | null }[] }>}
  */
 export function runTurn(agent, content, { onChunk, onStatus, signal }) {
   if (!existsSync(agent.workingDir)) {
@@ -967,7 +981,7 @@ export function runTurn(agent, content, { onChunk, onStatus, signal }) {
  * @param {ManagedProcess} proc
  * @param {import('./agentRunner.js').ContentBlock[]} content
  * @param {{ onChunk: (text: string) => void, onStatus?: (status: string) => void, signal?: AbortSignal }} options
- * @returns {Promise<{ text: string, permissionDenials: import('./agentRunner.js').PermissionDenial[], sessionId: string | null, stopped: boolean, toolCalls: ToolCall[], wasLocalCommand: boolean, contextCleared: boolean, usage: TurnUsage | null, totalCostUsd: number | null, durationMs: number | null, model: string | null, compactions: { trigger: 'auto' | 'manual', preTokens: number | null, postTokens: number | null }[] }>}
+ * @returns {Promise<{ text: string, permissionDenials: import('./agentRunner.js').PermissionDenial[], sessionId: string | null, stopped: boolean, toolCalls: ToolCall[], wasLocalCommand: boolean, contextCleared: boolean, usage: TurnUsage | null, contextTokens: number | null, totalCostUsd: number | null, durationMs: number | null, model: string | null, compactions: { trigger: 'auto' | 'manual', preTokens: number | null, postTokens: number | null }[] }>}
  */
 function runOneTurn(proc, content, { onChunk, onStatus, signal }) {
   return new Promise((resolve, reject) => {
@@ -1007,6 +1021,7 @@ function runOneTurn(proc, content, { onChunk, onStatus, signal }) {
         wasLocalCommand: turn.wasLocalCommand,
         contextCleared: turn.contextCleared,
         usage: turn.usage,
+        contextTokens: turn.contextTokens,
         totalCostUsd: turn.totalCostUsd,
         durationMs: turn.durationMs,
         model: turn.model,
@@ -1029,6 +1044,7 @@ function runOneTurn(proc, content, { onChunk, onStatus, signal }) {
       if (signal) signal.removeEventListener('abort', killForStop);
       const err = new Error(message);
       err.usage = turn.usage;
+      err.contextTokens = turn.contextTokens;
       err.totalCostUsd = turn.totalCostUsd;
       err.durationMs = turn.durationMs;
       err.model = turn.model;

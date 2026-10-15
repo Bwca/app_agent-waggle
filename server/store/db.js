@@ -130,10 +130,13 @@ function transaction(fn) {
  *   cumulativeCostUsd which only ever grows) — the number that answers "why
  *   did the all-time total just jump," shown alongside it in the agent
  *   panel. Undefined until the agent's first real turn.
- * @property {number} [lastContextTokens] - inputTokens + cacheCreationInputTokens
- *   + cacheReadInputTokens from this agent's most recent turn — i.e. roughly
- *   what it costs just to resume this session and read back its accumulated
- *   history, before any new output. Undefined until the first real turn.
+ * @property {number} [lastContextTokens] - The session's context size (input +
+ *   cache-creation + cache-read tokens) as of the last model request of
+ *   this agent's most recent turn that made one — i.e. what every request
+ *   in its next turn will have to read back, before any new output.
+ *   Undefined until the first real turn. See createTurnAccumulator's
+ *   contextTokens docs (agentProcessManager.js) for why it isn't the
+ *   `result` event's summed totals.
  *   The number that answers "is this session's cache big enough that I
  *   should consider starting fresh (remove + re-add the agent) instead of
  *   letting it keep growing?" — see --autocompact in
@@ -978,7 +981,10 @@ export async function setAgentModel(id, model) {
  * cumulativeCostUsd (never reset, all-time across every chat this agent has
  * ever been part of — see its docs) and overwrites both lastTurnCostUsd and
  * lastContextTokens (only the most recent turn matters for either — see
- * their docs). Called for both a completed AND an errored turn, since an
+ * their docs). A null contextTokens (a turn that errored before making any
+ * model request, e.g. an immediate session-limit rejection) keeps the
+ * previous value instead of wiping it, since the session's context didn't
+ * change. Called for both a completed AND an errored turn, since an
  * errored one (e.g. a session-limit failure) still spent real tokens before
  * hitting the wall — same reasoning as the 'turn errored' log line in
  * ws/handler.js already capturing usage off the Error object.
@@ -988,7 +994,7 @@ export async function setAgentModel(id, model) {
  */
 export async function setAgentUsage(id, { totalCostUsd, contextTokens }) {
   const result = db.prepare(`
-    UPDATE agents SET cumulative_cost_usd = cumulative_cost_usd + ?, last_turn_cost_usd = ?, last_context_tokens = ? WHERE id = ?
+    UPDATE agents SET cumulative_cost_usd = cumulative_cost_usd + ?, last_turn_cost_usd = ?, last_context_tokens = COALESCE(?, last_context_tokens) WHERE id = ?
   `).run(totalCostUsd ?? 0, totalCostUsd ?? null, contextTokens ?? null, id);
   return result.changes > 0 ? getAgent(id) : null;
 }

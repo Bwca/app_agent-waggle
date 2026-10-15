@@ -151,6 +151,9 @@ export function dedupePermissionDenials(denials) {
  *   from wasLocalCommand.
  * @property {import('./agentProcessManager.js').TurnUsage | null} usage - Token
  *   accounting for this turn straight from the CLI's own `result` event.
+ * @property {number | null} contextTokens - The session's context size as of
+ *   this turn's last model request — see createTurnAccumulator's docs for
+ *   why this isn't derivable from `usage`.
  * @property {number | null} totalCostUsd - The CLI's own cost estimate for this turn.
  * @property {number | null} durationMs - Wall-clock turn duration per the CLI.
  * @property {string | null} model - The real model ID the CLI reported actually

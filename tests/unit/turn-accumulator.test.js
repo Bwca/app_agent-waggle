@@ -171,3 +171,37 @@ describe('createTurnAccumulator — text across a tool call', () => {
     assert.equal(chunks.at(-1), 'short reply');
   });
 });
+
+describe('createTurnAccumulator — contextTokens', () => {
+  // The `result` event's usage is summed across every request in the turn
+  // (one per tool-call step, each re-reading the whole context), so it
+  // wildly overstates the session's actual size. Observed live: a ~1M
+  // context reported as 33M after a long tool-heavy turn.
+  const assistant = (id, usage) => ({
+    type: 'assistant',
+    message: { id, model: 'claude-sonnet-5', content: [{ type: 'text', text: 'x' }], usage },
+  });
+
+  test('uses the last request\'s usage, not the result event\'s turn-wide sum', () => {
+    const turn = createTurnAccumulator();
+    turn.handleEvent(assistant('msg_1', { input_tokens: 2, cache_creation_input_tokens: 1000, cache_read_input_tokens: 150_000 }));
+    turn.handleEvent(assistant('msg_2', { input_tokens: 3, cache_creation_input_tokens: 500, cache_read_input_tokens: 151_000 }));
+    turn.handleEvent({
+      type: 'result',
+      result: 'done',
+      usage: { input_tokens: 5, output_tokens: 10, cache_creation_input_tokens: 1500, cache_read_input_tokens: 301_000 },
+    });
+    assert.equal(turn.contextTokens, 3 + 500 + 151_000);
+    assert.equal(turn.usage.cacheReadInputTokens, 301_000);
+  });
+
+  test('stays null for a turn with no real model request', () => {
+    const turn = createTurnAccumulator();
+    turn.handleEvent({
+      type: 'assistant',
+      message: { id: 'msg_1', model: '<synthetic>', content: [{ type: 'text', text: 'help' }], usage: { input_tokens: 0 } },
+    });
+    turn.handleEvent({ type: 'result', result: 'help' });
+    assert.equal(turn.contextTokens, null);
+  });
+});

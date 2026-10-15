@@ -1200,7 +1200,7 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, pri
     log.info({ agentId: agent.id, chatId: chat.id, streamId }, 'turn started');
 
     try {
-      const { text: fullText, permissionDenials, sessionId, stopped, toolCalls, wasLocalCommand, contextCleared, usage, totalCostUsd, durationMs, model, compactions } = await runAgentStream({
+      const { text: fullText, permissionDenials, sessionId, stopped, toolCalls, wasLocalCommand, contextCleared, usage, contextTokens, totalCostUsd, durationMs, model, compactions } = await runAgentStream({
         agent,
         chatId: chat.id,
         content,
@@ -1256,7 +1256,7 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, pri
       if (usage) {
         const updated = await setAgentUsage(agent.id, {
           totalCostUsd,
-          contextTokens: usage.inputTokens + usage.cacheCreationInputTokens + usage.cacheReadInputTokens,
+          contextTokens,
         });
         if (updated) broadcast(wss, { type: 'AGENT_UPDATED', agent: updated });
       }
@@ -1373,7 +1373,7 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, pri
       if (err.usage) {
         const updated = await setAgentUsage(agent.id, {
           totalCostUsd: err.totalCostUsd,
-          contextTokens: err.usage.inputTokens + err.usage.cacheCreationInputTokens + err.usage.cacheReadInputTokens,
+          contextTokens: err.contextTokens ?? null,
         });
         if (updated) broadcast(wss, { type: 'AGENT_UPDATED', agent: updated });
       }

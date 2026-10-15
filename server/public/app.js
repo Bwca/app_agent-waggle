@@ -35,9 +35,9 @@ import { APP_VERSION } from './appVersion.js';
  * @property {number} [lastTurnCostUsd] - Cost (USD) of just this agent's
  *   most recent turn — overwritten each turn, unlike cumulativeCostUsd
  *   which only grows. Absent until the agent's first turn.
- * @property {number} [lastContextTokens] - Roughly what the agent's most
- *   recent turn spent just resuming its session (input + cache-creation +
- *   cache-read tokens) before producing anything new. Absent until the
+ * @property {number} [lastContextTokens] - The agent's session context size
+ *   as of its most recent turn's last model request — what each request of
+ *   its next turn will read back before producing anything new. Absent until the
  *   agent's first turn — see formatUsageLabel.
  * @property {string} [sessionLimitResetAt] - ISO 8601 instant Claude's own
  *   session-limit error most recently said this agent's limit resets at.
@@ -700,12 +700,13 @@ const MODEL_ALIASES = ['opus', 'sonnet', 'haiku', 'fable'];
 /**
  * Above this many tokens, an agent's most recent lastContextTokens (see its
  * docs in server/store/db.js) gets a visually distinct warning treatment in
- * the agent panel — this is well past the point where --autocompact should
- * have already stepped in (agentProcessManager.js's buildArgs), so a badge
- * still showing this much is worth a second look, not just background info.
- * Not a hard limit of any kind — purely a display threshold.
+ * the agent panel — this is past the point where --autocompact's default
+ * 200k window (agentProcessManager.js's AUTOCOMPACT_WINDOW) should have
+ * already stepped in, so a badge still showing this much is worth a second
+ * look, not just background info. Not a hard limit of any kind — purely a
+ * display threshold.
  */
-const USAGE_HIGH_CONTEXT_TOKENS = 2_000_000;
+const USAGE_HIGH_CONTEXT_TOKENS = 300_000;
 
 /**
  * Turns a raw model ID the CLI reported (e.g. "claude-sonnet-5",
