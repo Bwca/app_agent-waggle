@@ -70,6 +70,8 @@ function killTree(child, signal, agentId) {
  * @property {import('child_process').ChildProcess} child
  * @property {string} agentId
  * @property {string} buffer - Partial last line of stdout not yet parsed
+ * @property {number} costSoFar - The CLI's running `total_cost_usd` as of
+ *   the last `result` event this process reported — see withPerTurnCost.
  * @property {{ handleEvent: (event: object) => void, handleExit: (code: number|null, sig: string|null) => void } | null} currentTurn
  * @property {TurnAccumulator | null} background - Accumulates events that
  *   arrive while `currentTurn` is null — see handleUnsolicitedEvent.
@@ -187,6 +189,29 @@ const AUTOCOMPACT_WINDOW = process.env.APP_AUTOCOMPACT || '200k';
  */
 function isAlive(proc) {
   return proc.child.exitCode === null && proc.child.signalCode === null;
+}
+
+/**
+ * Turns a `result` event's `total_cost_usd` into the cost of just that turn.
+ * Confirmed against the real CLI: in a persistent stream-json process it's a
+ * running total for the whole process (three one-line turns reported
+ * 0.0018, 0.0035, 0.0041), while `usage` alongside it is per-turn. Treating
+ * the running total as one turn's cost made "last turn" show the process
+ * total, and added the whole total to cumulativeCostUsd again on every turn,
+ * including errored turns that spent nothing. Reported live: an agent showing
+ * $259 all-time. Every result event goes through this, foreground or
+ * unsolicited, so the baseline stays in step with the CLI's own total.
+ * Returns the event unchanged if it isn't a costed `result` event.
+ * @param {{ costSoFar: number }} proc - Mutated: costSoFar advances to the
+ *   event's running total.
+ * @param {object} event
+ * @returns {object}
+ */
+export function withPerTurnCost(proc, event) {
+  if (event.type !== 'result' || typeof event.total_cost_usd !== 'number') return event;
+  const turnCost = Math.max(0, event.total_cost_usd - proc.costSoFar);
+  proc.costSoFar = Math.max(proc.costSoFar, event.total_cost_usd);
+  return { ...event, total_cost_usd: turnCost };
 }
 
 /**
@@ -399,7 +424,9 @@ function describeToolUse({ name, input }) {
  *   on a 1M context reports ~20M. Null for a turn with no real assistant
  *   event (a pure local command, or an error before any request).
  * @property {number | null} totalCostUsd - The CLI's own cost estimate for
- *   this turn, same caveats as `usage`.
+ *   this turn alone, same caveats as `usage` — the process-wide running
+ *   total the CLI reports is already converted by withPerTurnCost before
+ *   the event gets here.
  * @property {number | null} durationMs - Wall-clock turn duration per the
  *   CLI's own `result` event.
  * @property {string | null} model - The real model ID reported on this
@@ -864,7 +891,7 @@ function spawnProcess(agent) {
   });
 
   /** @type {ManagedProcess} */
-  const proc = { child, agentId: agent.id, buffer: '', currentTurn: null, background: null, backgroundStream: null, backgroundTasks: [], queue: Promise.resolve(), skills: lastKnownSkills.get(agent.id) ?? [] };
+  const proc = { child, agentId: agent.id, buffer: '', costSoFar: 0, currentTurn: null, background: null, backgroundStream: null, backgroundTasks: [], queue: Promise.resolve(), skills: lastKnownSkills.get(agent.id) ?? [] };
 
   child.stdout.setEncoding('utf-8');
   child.stdout.on('data', (chunk) => {
@@ -872,8 +899,9 @@ function spawnProcess(agent) {
     const lines = proc.buffer.split('\n');
     proc.buffer = lines.pop() ?? '';
     for (const line of lines) {
-      const event = parseLine(line);
-      if (!event) continue;
+      const parsed = parseLine(line);
+      if (!parsed) continue;
+      const event = withPerTurnCost(proc, parsed);
       // The one piece of information that would have made the Windows MCP
       // investigation trivial instead of requiring hours of empirical
       // spikes: what MCP servers this process actually saw, and whether
@@ -912,7 +940,7 @@ function spawnProcess(agent) {
     if (proc.buffer.trim()) {
       const event = parseLine(proc.buffer);
       proc.buffer = '';
-      if (event) proc.currentTurn?.handleEvent(event);
+      if (event) proc.currentTurn?.handleEvent(withPerTurnCost(proc, event));
     }
     proc.currentTurn?.handleExit(code, sig);
     // An unsolicited turn cut off mid-way (stopped, crashed) never reaches
