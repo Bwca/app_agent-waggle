@@ -1,5 +1,5 @@
 /**
- * @fileoverview Owns one persistent `claude` CLI process per agent, kept
+ * @fileoverview Owns one persistent agent CLI process per agent, kept
  * alive for as long as the agent is in a chat, instead of spawning a fresh
  * one-shot process per turn (the old model in agentRunner.js). This is what
  * lets MCP servers — and anything else expensive to establish — survive
@@ -13,17 +13,25 @@
  * live process. Interrupting a turn (SIGINT) still ends the process
  * afterward regardless — handled here as "evict and let the next turn
  * respawn + --resume", the same recovery path already used for a crash.
+ *
+ * Which CLI that process is, and everything specific to it (flags, wire
+ * format, event parsing), comes from the agent's provider — see
+ * providers/index.js. This file only owns the lifecycle around it.
  */
 
 import { spawn } from 'child_process';
 import { existsSync } from 'fs';
-import { basename } from 'path';
 import { t } from '../i18n/t.js';
 import { logger } from '../logger.js';
+import { providerForAgent } from './providers/index.js';
+
+/** @typedef {import('./providers/index.js').ToolCall} ToolCall */
+/** @typedef {import('./providers/index.js').TurnUsage} TurnUsage */
+/** @typedef {import('./providers/index.js').TurnAccumulator} TurnAccumulator */
+/** @typedef {import('./providers/index.js').BackgroundTask} BackgroundTask */
+/** @typedef {import('./providers/index.js').ProcessSignal} ProcessSignal */
 
 const log = logger.child({ component: 'agentProcessManager' });
-
-const CLAUDE_BIN = process.env.CLAUDE_BIN || 'claude';
 
 /**
  * Kills a process, including any children it spawned (an MCP server
@@ -70,8 +78,10 @@ function killTree(child, signal, agentId) {
  * @property {import('child_process').ChildProcess} child
  * @property {string} agentId
  * @property {string} buffer - Partial last line of stdout not yet parsed
- * @property {number} costSoFar - The CLI's running `total_cost_usd` as of
- *   the last `result` event this process reported — see withPerTurnCost.
+ * @property {import('./providers/index.js').AgentProvider} provider - The
+ *   CLI this process runs as.
+ * @property {object} providerState - The provider's own per-process state
+ *   (see AgentProvider.createProcessState), passed to normalizeEvent.
  * @property {{ handleEvent: (event: object) => void, handleExit: (code: number|null, sig: string|null) => void } | null} currentTurn
  * @property {TurnAccumulator | null} background - Accumulates events that
  *   arrive while `currentTurn` is null — see handleUnsolicitedEvent.
@@ -158,13 +168,6 @@ const backgroundErrorHandlers = new Map();
 const backgroundUsageHandlers = new Map();
 
 /**
- * @typedef {Object} BackgroundTask
- * @property {string} id - The CLI's own task_id
- * @property {string} type - e.g. "local_bash"
- * @property {string} description - The CLI's own human-readable label
- */
-
-/**
  * @typedef {Object} BackgroundStream
  * @property {string} streamId
  * @property {(text: string) => void} onChunk
@@ -186,22 +189,6 @@ const backgroundStreamHandlers = new Map();
  * @type {Map<string, (tasks: BackgroundTask[]) => void>}
  */
 const backgroundTasksHandlers = new Map();
-
-/**
- * Context size, in the CLI's own `--autocompact` syntax, at which an agent's
- * session gets summarized. Overridable via APP_AUTOCOMPACT (the CLI accepts
- * 'auto', or 100k–1M, e.g. "300k" or "300000").
- *
- * Deliberately not 'auto': observed live, 'auto' only compacts near the
- * model's full window (one agent compacted at 967,457 → 11,406 tokens), so
- * sessions sat at 400k–800k between compactions. Every request in a turn
- * re-reads that whole context, and a turn that resumes after the prompt
- * cache expired re-writes all of it first. Four such agents nudged at once
- * used up a freshly-reset session limit before any of them finished a
- * reply. A smaller window keeps each request cheap at the cost of
- * summarizing more often.
- */
-const AUTOCOMPACT_WINDOW = process.env.APP_AUTOCOMPACT || '200k';
 
 /**
  * @param {ManagedProcess} proc
@@ -226,431 +213,6 @@ function isAlive(proc) {
  */
 function isAvailable(proc) {
   return isAlive(proc) && !proc.retiring;
-}
-
-/**
- * Turns a `result` event's `total_cost_usd` into the cost of just that turn.
- * Confirmed against the real CLI: in a persistent stream-json process it's a
- * running total for the whole process (three one-line turns reported
- * 0.0018, 0.0035, 0.0041), while `usage` alongside it is per-turn. Treating
- * the running total as one turn's cost made "last turn" show the process
- * total, and added the whole total to cumulativeCostUsd again on every turn,
- * including errored turns that spent nothing. Reported live: an agent showing
- * $259 all-time. Every result event goes through this, foreground or
- * unsolicited, so the baseline stays in step with the CLI's own total.
- * Returns the event unchanged if it isn't a costed `result` event.
- * @param {{ costSoFar: number }} proc - Mutated: costSoFar advances to the
- *   event's running total.
- * @param {object} event
- * @returns {object}
- */
-export function withPerTurnCost(proc, event) {
-  if (event.type !== 'result' || typeof event.total_cost_usd !== 'number') return event;
-  const turnCost = Math.max(0, event.total_cost_usd - proc.costSoFar);
-  proc.costSoFar = Math.max(proc.costSoFar, event.total_cost_usd);
-  return { ...event, total_cost_usd: turnCost };
-}
-
-/**
- * Builds the same CLI args agentRunner.js's runAgentStream always built —
- * see its (now-delegating) docs for the reasoning behind each flag.
- * @param {import('../store/db.js').Agent} agent
- * @returns {string[]}
- */
-function buildArgs(agent) {
-  const args = [
-    '--print',
-    '--input-format=stream-json',
-    '--output-format=stream-json',
-    '--verbose',
-    // Lets the CLI summarize its own older context once a resumed session's
-    // cache grows past AUTOCOMPACT_WINDOW, instead of every request paying
-    // to re-read a huge history in full. Lossy-but-graceful, unlike dropping
-    // resumeId outright (which forgets everything).
-    '--autocompact', AUTOCOMPACT_WINDOW,
-  ];
-  if (agent.dangerouslySkipPermissions) {
-    args.push('--dangerously-skip-permissions');
-  } else {
-    args.push('--permission-mode', 'acceptEdits');
-  }
-  args.push('--add-dir', agent.workingDir);
-  for (const p of agent.extraAllowedPaths ?? []) {
-    args.push('--add-dir', p);
-  }
-  if (agent.allowedToolPatterns?.length && !agent.dangerouslySkipPermissions) {
-    args.push('--allowedTools', agent.allowedToolPatterns.join(' '));
-  }
-  if (agent.resumeId) {
-    args.push(`--resume=${agent.resumeId}`);
-  }
-  if (agent.chromeAccess) {
-    args.push('--chrome');
-  }
-  // Confirmed empirically (real CLI, not assumed): pairing --model with
-  // --resume on an existing session genuinely switches which model handles
-  // the NEXT turn, without losing conversation context — same session_id,
-  // same history. The CLI does report a cache_miss_reason: "model_changed"
-  // diagnostic on that turn (prompt caching is model-specific, so a switch
-  // costs one full cache rebuild), but it's a real mid-conversation switch,
-  // not a fresh session. See modelOverride's docs in store/db.js.
-  if (agent.modelOverride) {
-    args.push('--model', agent.modelOverride);
-  }
-  return args;
-}
-
-/**
- * Parses a single newline-delimited JSON line from claude CLI stream-json output.
- * @param {string} line
- * @returns {{ type: string, [key: string]: unknown } | null}
- */
-function parseLine(line) {
-  const trimmed = line.trim();
-  if (!trimmed) return null;
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Recognizes the CLI's own "MCP OAuth session expired" wording. Confirmed
- * (by inspecting the installed `claude` binary directly) that this text is
- * literally embedded in the CLI itself — but it surfaces to us as ordinary
- * assistant text (the model just relays what the failed tool call told it),
- * not as a distinct stream-json event type we could otherwise key off of.
- *
- * Why this matters: MCP server auth is read fresh only once, at this
- * process's own spawn time (see spawnProcess docs) — it is NEVER re-read
- * for the life of the process. If a user re-authenticates externally
- * (`claude` → `/login` in a real terminal) while this agent's persistent
- * process is still running, that process has no way to notice — it keeps
- * using the stale token it started with, indefinitely, until killed and
- * respawned. Matching on wording is inherently version-fragile, so this
- * stays a narrow, best-effort net rather than the sole safeguard: it lets
- * the *next* turn spawn a fresh process that re-reads current auth from
- * disk, instead of a process wedged on the credentials it saw at spawn.
- * @param {string} text
- * @returns {boolean}
- */
-export function looksLikeMcpAuthFailure(text) {
-  if (!text) return false;
-  const lower = text.toLowerCase();
-  return lower.includes('oauth session expired')
-    || (lower.includes('failed to authenticate') && lower.includes('could not be'));
-}
-
-/**
- * @typedef {Object} ToolCall
- * @property {string} id - The tool_use content block's own id — links it to
- *   its eventual tool_result.
- * @property {string} name - Raw tool name, e.g. "Bash", "Edit", or an MCP
- *   tool's full name like "mcp__linear__list_issues".
- * @property {string} label - Human "what's happening" summary (see
- *   describeToolUse) — the same text already streamed live as
- *   AGENT_STREAM_STATUS, kept here so it's still visible after the fact.
- * @property {string} result - The tool's own output (stdout, file diff,
- *   MCP response, ...), capped via truncateToolResult — empty string if no
- *   matching tool_result ever arrived (e.g. the call was permission-denied).
- * @property {boolean} isError - True if the tool_result reported is_error.
- */
-
-/** Caps a single tool result's stored/displayed size — this is chat
- * transcript chrome, not a log viewer; a multi-megabyte `cat` dump has no
- * business being shipped to the client and persisted in SQLite in full. */
-const MAX_TOOL_RESULT_CHARS = 8000;
-
-/**
- * Flattens a tool_result event's `content` (a bare string, OR an array of
- * Anthropic content blocks — text/image/etc., same shape as any other
- * message content) down to one display string.
- * @param {unknown} content
- * @returns {string}
- */
-function extractToolResultText(content) {
-  if (typeof content === 'string') return content;
-  if (Array.isArray(content)) {
-    return content
-      .map((block) => (block?.type === 'text' ? block.text : `[${block?.type ?? 'unknown'}]`))
-      .join('\n');
-  }
-  return '';
-}
-
-/**
- * @param {string} text
- * @returns {string}
- */
-function truncateToolResult(text) {
-  if (text.length <= MAX_TOOL_RESULT_CHARS) return text;
-  return `${text.slice(0, MAX_TOOL_RESULT_CHARS)}\n… (truncated)`;
-}
-
-/**
- * Turns a tool_use content block into a short, human "what's happening now"
- * label — mirrors the live activity Claude Code itself shows in a terminal.
- * Falls back to the raw tool name for anything unrecognized (custom skills,
- * MCP tools, future built-ins), since the tool set isn't fixed.
- * @param {{ name: string, input?: Record<string, unknown> }} block
- * @returns {string}
- */
-function describeToolUse({ name, input }) {
-  const baseName = (p) => (typeof p === 'string' && p ? basename(p) : '');
-  switch (name) {
-    case 'Bash':
-      return `Running: ${input?.description || input?.command || '…'}`;
-    case 'Read':
-      return `Reading ${baseName(input?.file_path) || 'a file'}`;
-    case 'Write':
-      return `Writing ${baseName(input?.file_path) || 'a file'}`;
-    case 'Edit':
-    case 'NotebookEdit':
-      return `Editing ${baseName(input?.file_path ?? input?.notebook_path) || 'a file'}`;
-    case 'Grep':
-      return `Searching for "${input?.pattern ?? ''}"`;
-    case 'Glob':
-      return `Finding files matching "${input?.pattern ?? ''}"`;
-    case 'WebFetch':
-      return `Fetching ${input?.url ?? 'a page'}`;
-    case 'WebSearch':
-      return `Searching the web for "${input?.query ?? ''}"`;
-    case 'Task':
-      return `Delegating: ${input?.description ?? 'a subtask'}`;
-    default:
-      return `Using ${name}`;
-  }
-}
-
-/**
- * @typedef {Object} TurnUsage
- * @property {number} inputTokens
- * @property {number} outputTokens
- * @property {number} cacheCreationInputTokens
- * @property {number} cacheReadInputTokens
- */
-
-/**
- * @typedef {Object} TurnAccumulator
- * @property {string} fullText
- * @property {string} resultText
- * @property {string | null} sessionId
- * @property {import('./agentRunner.js').PermissionDenial[]} permissionDenials
- * @property {Map<string, ToolCall>} toolCalls
- * @property {boolean} done - Set once a `result` event has been fed in.
- * @property {boolean} wasLocalCommand - True if this turn's `assistant`
- *   event was the CLI's synthetic local-command reply, not a real model
- *   turn — see handleEvent's docs.
- * @property {string | null} errorMessage - Set once a `result` event with
- *   `is_error: true` has been fed in — see handleEvent's docs. Null for a
- *   normal, successful turn.
- * @property {TurnUsage | null} usage - Token accounting from the `result`
- *   event's own `usage` block. Set even when the turn ends in error (e.g. a
- *   session-limit failure still reports what was actually spent before it
- *   hit the wall) — null only when no `result` event ever arrived at all
- *   (a process crash mid-turn). This is what onward logging (ws/handler.js's
- *   'turn ended'/'turn errored') uses to make token burn per agent/turn
- *   debuggable after the fact, instead of having to guess from timestamps.
- * @property {number | null} contextTokens - input + cache-creation +
- *   cache-read tokens of this turn's LAST model request, from that
- *   `assistant` event's own `message.usage` — i.e. how big the session's
- *   context actually is now. Not derivable from `usage` above: the `result`
- *   event's totals are summed across every request in the turn (one per
- *   tool-call step, each re-reading the whole context), so a 20-step turn
- *   on a 1M context reports ~20M. Null for a turn with no real assistant
- *   event (a pure local command, or an error before any request).
- * @property {number | null} totalCostUsd - The CLI's own cost estimate for
- *   this turn alone, same caveats as `usage` — the process-wide running
- *   total the CLI reports is already converted by withPerTurnCost before
- *   the event gets here.
- * @property {number | null} durationMs - Wall-clock turn duration per the
- *   CLI's own `result` event.
- * @property {string | null} model - The real model ID reported on this
- *   turn's `assistant` events (e.g. "claude-sonnet-5"), straight from the
- *   CLI — this app never requests a specific model itself (no `--model`
- *   spawn flag), so this is purely what the CLI resolved on its own. Null
- *   for a turn that never produced a real assistant event (a pure local
- *   command, or a crash before any output) — see wasLocalCommand's docs
- *   for why "<synthetic>" is excluded here rather than captured as-is.
- * @property {{ trigger: 'auto' | 'manual', preTokens: number | null, postTokens: number | null }[]} compactions -
- *   Every `system`/`compact_boundary` event this turn reported (confirmed
- *   directly against the installed CLI binary's stream-json schema) —
- *   almost always 0 or 1, an array only in case the CLI ever reports more
- *   than one in a single turn. Usually empty; see buildArgs' `--autocompact`
- *   for what triggers this.
- * @property {(event: object) => void} handleEvent
- */
-
-/**
- * The text/tool_use/tool_result/result parsing at the heart of a turn —
- * shared by runOneTurn (an explicitly-initiated turn, streamed live via
- * onChunk/onStatus) and handleUnsolicitedEvent (a turn the CLI resumes and
- * runs entirely on its own — see that function's docs). Previously this
- * logic lived only inline in runOneTurn; factored out so both call sites
- * parse the exact same event shapes instead of two copies drifting apart.
- * @param {{ onChunk?: (text: string) => void, onStatus?: (status: string) => void }} [callbacks]
- * @returns {TurnAccumulator}
- */
-export function createTurnAccumulator({ onChunk, onStatus } = {}) {
-  // Tracks how much of each text block (keyed by its index in the current
-  // assistant message's content array) has already been emitted, so a
-  // streaming delta can be computed per-block rather than against a single
-  // turn-wide length — see the message-id check below for why that matters.
-  let lastAssistantMessageId;
-  let textBlockSeenLengths = new Map();
-
-  /** @type {TurnAccumulator} */
-  const turn = {
-    fullText: '',
-    resultText: '',
-    sessionId: null,
-    permissionDenials: [],
-    toolCalls: new Map(),
-    done: false,
-    wasLocalCommand: false,
-    contextCleared: false,
-    errorMessage: null,
-    usage: null,
-    contextTokens: null,
-    totalCostUsd: null,
-    durationMs: null,
-    model: null,
-    compactions: [],
-    handleEvent(event) {
-      if (typeof event.session_id === 'string') turn.sessionId = event.session_id;
-
-      // The `claude` CLI's OWN local-command dispatcher (its built-in
-      // commands like "/chrome", "/help" — a different, larger set than
-      // this project's .claude/commands/*.md skills) intercepts a bare
-      // "/word" turn and answers it locally, entirely client-side, BEFORE
-      // any of the turn's actual content (including a first-ever-turn
-      // [System] preamble sent alongside it — see buildPromptBlocks in
-      // ws/handler.js) ever reaches the model. Confirmed two different ways
-      // this actually surfaces: the on-disk session transcript records a
-      // {"type":"system","subtype":"local_command"} pair, but the LIVE
-      // --output-format=stream-json wire protocol this function actually
-      // parses is a DIFFERENT shape — a synthetic `assistant` event with
-      // message.model === "<synthetic>" (and the paired `result` event has
-      // num_turns: 0, total_cost_usd: 0 — zero real API usage). Checked
-      // directly against a raw `claude --print --output-format=stream-json`
-      // run, not assumed. Flagged here so the caller can avoid treating
-      // this turn as the agent having genuinely "spoken" — see
-      // Message.isLocalCommandOnly.
-      if (event.type === 'assistant' && event.message?.model === '<synthetic>') turn.wasLocalCommand = true;
-      else if (event.type === 'assistant' && typeof event.message?.model === 'string') turn.model = event.message.model;
-
-      if (event.type === 'assistant' && event.message?.model !== '<synthetic>' && event.message?.usage) {
-        const u = event.message.usage;
-        turn.contextTokens = (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0);
-      }
-
-      if (event.type === 'assistant' && Array.isArray(event.message?.content)) {
-        // Confirmed live against the real CLI: a turn with "text, tool call,
-        // more text" isn't one assistant message whose content array keeps
-        // growing across the tool call — it's a SEQUENCE OF SEPARATE
-        // assistant messages, a new message.id each time a tool call
-        // interrupts the model's output, each with its own content array
-        // that starts fresh. Comparing a new message's (short, just-started)
-        // text against the PREVIOUS message's already-longer length silently
-        // dropped or mangled every text block after the turn's first tool
-        // call — so block text is tracked per (message id, block index)
-        // instead of against a single turn-wide length.
-        if (event.message.id !== lastAssistantMessageId) {
-          lastAssistantMessageId = event.message.id;
-          textBlockSeenLengths = new Map();
-        }
-        event.message.content.forEach((block, index) => {
-          if (block.type === 'text') {
-            const seenLength = textBlockSeenLengths.get(index) ?? 0;
-            const delta = block.text.slice(seenLength);
-            if (delta) {
-              textBlockSeenLengths.set(index, block.text.length);
-              turn.fullText += delta;
-              onChunk?.(delta);
-            }
-          } else if (block.type === 'tool_use') {
-            const label = describeToolUse(block);
-            onStatus?.(label);
-            turn.toolCalls.set(block.id, { id: block.id, name: block.name, label, result: '', isError: false });
-          }
-        });
-      } else if (event.type === 'user' && Array.isArray(event.message?.content)) {
-        // Tool results are fed back to the model as a "user" turn (same
-        // wire shape the Anthropic API always uses) — this is where the
-        // actual output of a tool_use above shows up, matched by id.
-        for (const block of event.message.content) {
-          if (block.type !== 'tool_result') continue;
-          const call = turn.toolCalls.get(block.tool_use_id);
-          if (!call) continue;
-          call.result = truncateToolResult(extractToolResultText(block.content));
-          call.isError = !!block.is_error;
-        }
-      } else if (event.type === 'system' && event.subtype === 'compact_boundary') {
-        // The CLI's own --autocompact stepping in mid-turn (or a manual
-        // /compact): confirmed directly against the installed binary's
-        // stream-json schema — {"type":"system","subtype":"compact_boundary",
-        // "compact_metadata":{trigger,pre_tokens,post_tokens,...}}. Not
-        // otherwise visible anywhere (see agentProcessManager.js's buildArgs
-        // --autocompact docs) — surfaced here so ws/handler.js can post a
-        // system note into the chat instead of it silently passing.
-        const meta = event.compact_metadata;
-        if (meta) {
-          turn.compactions.push({
-            trigger: meta.trigger ?? 'auto',
-            preTokens: meta.pre_tokens ?? null,
-            postTokens: meta.post_tokens ?? null,
-          });
-        }
-      } else if (event.type === 'system' && event.subtype === 'conversation_reset') {
-        // A bare "/clear" — confirmed directly against the installed CLI
-        // binary via a raw two-turn stream-json run, NOT the same shape as
-        // "/chrome"/"/help" above (no synthetic assistant message at all).
-        // Instead this fires alone, still tagged with the OLD session_id,
-        // and is immediately followed by a fresh system/init carrying a
-        // BRAND-NEW session_id — i.e. unlike /compact, this genuinely
-        // rotates which CLI session this process is resuming. turn.sessionId
-        // (set generically above from every event) ends up holding that new
-        // id by the time this turn's own `result` event arrives, which is
-        // what callers need to persist going forward — see
-        // store/db.js's recordContextClear.
-        turn.contextCleared = true;
-      } else if (event.type === 'result') {
-        turn.resultText = typeof event.result === 'string' ? event.result : turn.fullText;
-        if (Array.isArray(event.permission_denials) && event.permission_denials.length) {
-          turn.permissionDenials = event.permission_denials;
-        }
-        if (event.usage) {
-          turn.usage = {
-            inputTokens: event.usage.input_tokens ?? 0,
-            outputTokens: event.usage.output_tokens ?? 0,
-            cacheCreationInputTokens: event.usage.cache_creation_input_tokens ?? 0,
-            cacheReadInputTokens: event.usage.cache_read_input_tokens ?? 0,
-          };
-        }
-        if (typeof event.total_cost_usd === 'number') turn.totalCostUsd = event.total_cost_usd;
-        if (typeof event.duration_ms === 'number') turn.durationMs = event.duration_ms;
-        // A `result` event isn't always a successful completion — confirmed
-        // live: an unusable CLI flag (e.g. an agent created with a bogus
-        // resumeId, so --resume is invalid) still produces a well-formed
-        // `result` event, just with is_error:true, subtype
-        // "error_during_execution", and the actual message in `errors`
-        // rather than `result` (which is why the fallback above lands on
-        // turn.fullText — empty, since the model never ran). Without this
-        // check, that error event was previously treated exactly like a
-        // real empty-text success: the turn "completed" with fullText: '',
-        // silently — an empty reply bubble with zero diagnostic, and every
-        // later message to that agent failing the exact same silent way.
-        if (event.is_error) {
-          turn.errorMessage = Array.isArray(event.errors) && event.errors.length
-            ? event.errors.join('; ')
-            : (turn.resultText || 'unknown error');
-        }
-        turn.done = true;
-      }
-    },
-  };
-  return turn;
 }
 
 /**
@@ -809,20 +371,13 @@ export function getAllBackgroundTasks() {
 }
 
 /**
- * Applies a `system/background_tasks_changed` event to a process — see
+ * Applies a process's newly reported background task list — see
  * onBackgroundTasksChanged. Exported for its unit test.
  * @param {ManagedProcess} proc
- * @param {{ tasks?: unknown }} event
+ * @param {BackgroundTask[]} tasks - The complete current list.
  * @returns {void}
  */
-export function applyBackgroundTasksChanged(proc, event) {
-  const tasks = Array.isArray(event.tasks)
-    ? event.tasks.map((task) => ({
-        id: String(task.task_id ?? ''),
-        type: String(task.task_type ?? ''),
-        description: String(task.description ?? ''),
-      }))
-    : [];
+export function applyBackgroundTasksChanged(proc, tasks) {
   proc.backgroundTasks = tasks;
   backgroundTasksHandlers.get(proc.agentId)?.(tasks);
 }
@@ -856,37 +411,32 @@ export function getAgentSkills(agentId) {
  * are harmless no-ops, since the accumulator only actually fires a handler
  * on a genuine `result`, and (for onBackgroundTurn) only if it captured
  * real content.
- * Exported (alongside createTurnAccumulator) so this routing decision — a
+ * Exported so this routing decision — a
  * `result` with is_error:true going to onBackgroundError, never
  * onBackgroundTurn — has a direct unit test; see
  * tests/unit/background-unprompted-error.test.js. Otherwise only ever
  * called from spawnProcess's own stdout handler against a real process.
  * @param {ManagedProcess} proc
  * @param {{ type: string, [key: string]: unknown }} event
+ * @param {ProcessSignal} [signal] - The provider's reading of `event`, if
+ *   the caller already has it.
  * @returns {void}
  */
-export function handleUnsolicitedEvent(proc, event) {
-  if (event.type === 'system' && event.subtype === 'compact_boundary') {
-    // Reported immediately, independent of the assistant/result accumulator
-    // below — a compaction firing while idle isn't guaranteed to be
-    // followed by any actual agent speech (see onBackgroundCompaction's
-    // docs), so it can't wait on `done` the way handler() below does.
-    const meta = event.compact_metadata;
-    if (meta) {
-      backgroundCompactionHandlers.get(proc.agentId)?.({
-        trigger: meta.trigger ?? 'auto',
-        preTokens: meta.pre_tokens ?? null,
-        postTokens: meta.post_tokens ?? null,
-      });
-    }
+export function handleUnsolicitedEvent(proc, event, signal = proc.provider.inspectEvent(event)) {
+  if (signal.compaction) {
+    // Reported immediately, independent of the turn accumulator below — a
+    // compaction firing while idle isn't guaranteed to be followed by any
+    // actual agent speech (see onBackgroundCompaction's docs), so it can't
+    // wait on `done` the way handler() below does.
+    backgroundCompactionHandlers.get(proc.agentId)?.(signal.compaction);
     return;
   }
-  if (event.type !== 'assistant' && event.type !== 'user' && event.type !== 'result') return;
+  if (!signal.isTurnContent) return;
 
   if (!proc.background) {
     const stream = backgroundStreamHandlers.get(proc.agentId)?.() ?? null;
     proc.backgroundStream = stream;
-    proc.background = createTurnAccumulator({ onChunk: stream?.onChunk, onStatus: stream?.onStatus });
+    proc.background = proc.provider.createTurnAccumulator({ onChunk: stream?.onChunk, onStatus: stream?.onStatus });
   }
   proc.background.handleEvent(event);
   if (!proc.background.done) return;
@@ -941,12 +491,14 @@ export function handleUnsolicitedEvent(proc, event) {
  */
 function spawnProcess(agent) {
   const resumed = !!agent.resumeId;
-  const child = spawn(CLAUDE_BIN, buildArgs(agent), {
+  const provider = providerForAgent(agent);
+  const { command, args } = provider.spawnCommand(agent);
+  const child = spawn(command, args, {
     cwd: agent.workingDir,
     env: { ...process.env },
     stdio: ['pipe', 'pipe', 'pipe'],
   });
-  log.info({ agentId: agent.id, agentName: agent.name, pid: child.pid, resumed }, 'agent process spawned');
+  log.info({ agentId: agent.id, agentName: agent.name, pid: child.pid, resumed, provider: provider.id }, 'agent process spawned');
 
   // Avoid an unhandled EPIPE if the process exits before/while we write.
   child.stdin.on('error', () => {});
@@ -956,7 +508,7 @@ function spawnProcess(agent) {
   });
 
   /** @type {ManagedProcess} */
-  const proc = { child, agentId: agent.id, buffer: '', costSoFar: 0, currentTurn: null, retiring: null, background: null, backgroundStream: null, backgroundTasks: [], queue: Promise.resolve(), skills: lastKnownSkills.get(agent.id) ?? [] };
+  const proc = { child, agentId: agent.id, provider, providerState: provider.createProcessState(), buffer: '', currentTurn: null, retiring: null, background: null, backgroundStream: null, backgroundTasks: [], queue: Promise.resolve(), skills: lastKnownSkills.get(agent.id) ?? [] };
 
   child.stdout.setEncoding('utf-8');
   child.stdout.on('data', (chunk) => {
@@ -964,31 +516,28 @@ function spawnProcess(agent) {
     const lines = proc.buffer.split('\n');
     proc.buffer = lines.pop() ?? '';
     for (const line of lines) {
-      const parsed = parseLine(line);
+      const parsed = provider.parseLine(line);
       if (!parsed) continue;
-      const event = withPerTurnCost(proc, parsed);
+      const event = provider.normalizeEvent(proc.providerState, parsed);
+      const signal = provider.inspectEvent(event);
       // The one piece of information that would have made the Windows MCP
       // investigation trivial instead of requiring hours of empirical
       // spikes: what MCP servers this process actually saw, and whether
       // they connected — now on the record for every single spawn.
-      if (event.type === 'system' && event.subtype === 'init' && Array.isArray(event.mcp_servers) && event.mcp_servers.length) {
-        log.info({ agentId: agent.id, agentName: agent.name, pid: child.pid, mcpServers: event.mcp_servers }, 'mcp server status at turn start');
+      if (signal.mcpServers) {
+        log.info({ agentId: agent.id, agentName: agent.name, pid: child.pid, mcpServers: signal.mcpServers }, 'mcp server status at turn start');
       }
-      // The CLI reports its own invokable skill names on every init — free
-      // (no probe turn, no API cost), and always current for whatever this
-      // specific process actually has available (built-in + marketplace/
-      // plugin + project-local), unlike statically guessing from disk.
-      if (event.type === 'system' && event.subtype === 'init' && Array.isArray(event.skills)) {
-        proc.skills = event.skills;
-        lastKnownSkills.set(agent.id, event.skills);
+      if (signal.skills) {
+        proc.skills = signal.skills;
+        lastKnownSkills.set(agent.id, signal.skills);
       }
-      if (event.type === 'system' && event.subtype === 'background_tasks_changed') {
-        applyBackgroundTasksChanged(proc, event);
+      if (signal.backgroundTasks) {
+        applyBackgroundTasksChanged(proc, signal.backgroundTasks);
       }
       if (proc.currentTurn) {
         proc.currentTurn.handleEvent(event);
       } else {
-        handleUnsolicitedEvent(proc, event);
+        handleUnsolicitedEvent(proc, event, signal);
       }
     }
   });
@@ -1003,9 +552,9 @@ function spawnProcess(agent) {
 
     // Flush a trailing unparsed line (no final newline) before signaling exit.
     if (proc.buffer.trim()) {
-      const event = parseLine(proc.buffer);
+      const event = provider.parseLine(proc.buffer);
       proc.buffer = '';
-      if (event) proc.currentTurn?.handleEvent(withPerTurnCost(proc, event));
+      if (event) proc.currentTurn?.handleEvent(provider.normalizeEvent(proc.providerState, event));
     }
     proc.currentTurn?.handleExit(code, sig);
     // An unsolicited turn cut off mid-way (stopped, crashed) never reaches
@@ -1016,7 +565,7 @@ function spawnProcess(agent) {
       proc.backgroundStream = null;
       proc.background = null;
     }
-    if (proc.backgroundTasks?.length) applyBackgroundTasksChanged(proc, { tasks: [] });
+    if (proc.backgroundTasks?.length) applyBackgroundTasksChanged(proc, []);
   });
 
   processes.set(agent.id, proc);
@@ -1087,7 +636,8 @@ export function runTurn(agent, content, { onChunk, onStatus, signal }) {
  */
 function runOneTurn(proc, content, { onChunk, onStatus, signal }) {
   return new Promise((resolve, reject) => {
-    const turn = createTurnAccumulator({ onChunk, onStatus });
+    const { provider } = proc;
+    const turn = provider.createTurnAccumulator({ onChunk, onStatus });
     let stopped = false;
     let settled = false;
 
@@ -1158,7 +708,7 @@ function runOneTurn(proc, content, { onChunk, onStatus, signal }) {
     proc.currentTurn = {
       handleEvent(event) {
         turn.handleEvent(event);
-        if (event.type !== 'result') return;
+        if (!turn.done) return;
         // A `result` event with is_error:true (e.g. an invalid --resume
         // flag, or another flag the CLI rejects outright) is a failure, not
         // a successful empty-text reply — see turn.errorMessage's docs.
@@ -1172,7 +722,7 @@ function runOneTurn(proc, content, { onChunk, onStatus, signal }) {
           fail(t('errors.claudeExecutionError', { message: turn.errorMessage }));
           return;
         }
-        if (looksLikeMcpAuthFailure(turn.resultText)) {
+        if (provider.looksLikeAuthFailure(turn.resultText)) {
           // Don't block returning this turn's (already-user-visible) error
           // text — evict in the background so the conversation isn't
           // stuck waiting on a kill+exit round-trip it doesn't need to see.
@@ -1196,7 +746,7 @@ function runOneTurn(proc, content, { onChunk, onStatus, signal }) {
       },
     };
 
-    proc.child.stdin.write(JSON.stringify({ type: 'user', message: { role: 'user', content } }) + '\n');
+    proc.child.stdin.write(provider.encodeTurn(content));
   });
 }
 
