@@ -164,6 +164,9 @@
           </select>
           <input id="agent-model-custom" data-testid="agent-model-custom-input" data-i18n-placeholder="agentModal.modelCustomPlaceholder" placeholder="e.g. claude-opus-4-1-20250805" autocomplete="off" hidden />
         </label>
+        <label class="field-label"><span data-i18n="agentModal.autocompactLabel">Compaction window</span> <span class="field-hint" data-i18n="agentModal.autocompactHint">(optional — context size at which this agent's session gets summarized)</span>
+          <input id="agent-autocompact" data-testid="agent-autocompact-input" list="autocompact-presets" autocomplete="off" />
+        </label>
         <div class="field-label"><span data-i18n="agentModal.colorLabel">Color</span>
           <div id="color-grid" class="color-grid" data-testid="color-grid"></div>
         </div>
@@ -249,6 +252,9 @@
             <option value="dark" data-i18n="settingsModal.themeOptionDark">Dark</option>
             <option value="light" data-i18n="settingsModal.themeOptionLight">Light</option>
           </select>
+        </label>
+        <label class="field-label"><span data-i18n="settingsModal.autocompactLabel">Default compaction window</span> <span class="field-hint" data-i18n="settingsModal.autocompactHint">(context size at which an agent's session gets summarized: "auto", or 100k–1M; an agent's own setting wins)</span>
+          <input id="settings-autocompact" data-testid="settings-autocompact-input" list="autocompact-presets" autocomplete="off" />
         </label>
         <p id="settings-error" data-testid="settings-error" class="error-text" hidden></p>
         <div id="settings-footer">
@@ -339,5 +345,6 @@
   </div>
 
   <script src="app.js" type="module"></script>
+  <datalist id="autocompact-presets"></datalist>
 </body>
 </html>

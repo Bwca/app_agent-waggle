@@ -8,6 +8,7 @@ import { renderMarkdown } from './markdown.js';
 import { APP_NAME } from './appName.js';
 import { APP_VERSION } from './appVersion.js';
 import { DEFAULT_PROVIDER_ID, nameGeneratorFor } from './agentProviders.js';
+import { AUTOCOMPACT_PRESETS } from './autocompact.js';
 
 // ─── Types (JSDoc only) ─────────────────────────────────────────────────────
 
@@ -28,6 +29,9 @@ import { DEFAULT_PROVIDER_ID, nameGeneratorFor } from './agentProviders.js';
  * @property {string} [modelOverride] - User-requested model ("opus", "sonnet",
  *   a full model ID, …), passed to the CLI as `--model`. Absent means the CLI
  *   decides on its own.
+ * @property {string} [autocompactOverride] - This agent's own context-compaction
+ *   window ("auto", "200k", …), passed to the CLI as `--autocompact`. Absent
+ *   means the Settings default applies (see effectiveDefaultAutocompact).
  * @property {number} cumulativeCostUsd - All-time running total cost (USD)
  *   across EVERY chat this agent has ever been part of, not just the one
  *   it's currently in — see formatUsageLabel, which is what actually labels
@@ -236,10 +240,22 @@ let noteEditAgentId = null;
  * @property {string} userColor - Hex color string, e.g. "#a6adc8"
  * @property {string} locale - UI language, e.g. "en-CA" or "fr-CA"
  * @property {string} theme - UI theme, "dark" or "light"
+ * @property {string} defaultAutocompact - Compaction window for agents with no
+ *   override of their own, '' when unset
+ * @property {string} autocompactFallback - What applies when
+ *   defaultAutocompact is unset (the server's APP_AUTOCOMPACT, or its built-in default)
  */
 
 /** @type {Settings} */
-let userSettings = { userDisplayName: 'You', userColor: '#a6adc8', locale: DEFAULT_LOCALE, theme: 'dark' };
+let userSettings = { userDisplayName: 'You', userColor: '#a6adc8', locale: DEFAULT_LOCALE, theme: 'dark', defaultAutocompact: '', autocompactFallback: '200k' };
+
+/**
+ * The compaction window an agent with no override of its own runs with.
+ * @returns {string}
+ */
+function effectiveDefaultAutocompact() {
+  return userSettings.defaultAutocompact || userSettings.autocompactFallback;
+}
 
 /** @type {string} the UI's currently active language */
 let currentLocale = DEFAULT_LOCALE;
@@ -622,6 +638,7 @@ const agentDirRecentWrap = $('#agent-dir-recent-wrap');
 const agentResumeInput = $('#agent-resume');
 const agentModelInput  = $('#agent-model');
 const agentModelCustomInput = $('#agent-model-custom');
+const agentAutocompactInput = $('#agent-autocompact');
 const agentNoteInput   = $('#agent-note');
 const colorGrid        = $('#color-grid');
 const yoloModeCheck    = $('#yolo-mode-check');
@@ -669,6 +686,7 @@ const settingsDisplayNameInput = $('#settings-display-name');
 const settingsColorGrid = $('#settings-color-grid');
 const settingsLanguageSelect = $('#settings-language');
 const settingsThemeSelect = $('#settings-theme');
+const settingsAutocompactInput = $('#settings-autocompact');
 const settingsError    = $('#settings-error');
 const settingsSave     = $('#settings-save');
 
@@ -942,7 +960,8 @@ let pendingConfirmResolve = null;
  * `okLabel` overrides the confirm button's text (defaults to the "Delete"
  * label baked into its markup, right for every other current caller).
  * @param {string} message
- * @param {{ checkboxLabel?: string, textInput?: { value?: string, placeholder?: string }, modelInput?: { value?: string }, okLabel?: string }} [opts]
+ * `textInput.list` names a `<datalist>` of suggestions for the field.
+ * @param {{ checkboxLabel?: string, textInput?: { value?: string, placeholder?: string, list?: string }, modelInput?: { value?: string }, okLabel?: string }} [opts]
  * @returns {Promise<{ confirmed: boolean, checked: boolean, value: string }>}
  */
 function confirmDialog(message, opts = {}) {
@@ -956,6 +975,8 @@ function confirmDialog(message, opts = {}) {
   if (opts.textInput) {
     confirmTextInput.value = opts.textInput.value ?? '';
     confirmTextInput.placeholder = opts.textInput.placeholder ?? '';
+    if (opts.textInput.list) confirmTextInput.setAttribute('list', opts.textInput.list);
+    else confirmTextInput.removeAttribute('list');
   }
   confirmModelRow.hidden = !opts.modelInput;
   if (opts.modelInput) {
@@ -3093,6 +3114,7 @@ function renderAgentPanel() {
         <ul class="agent-menu" data-testid="agent-menu" hidden>
           <li><button class="agent-note-btn" data-testid="agent-note-btn">🗒 ${agent.note ? t('agent.editNoteTitle') : t('agent.addNoteTitle')}</button></li>
           <li><button class="agent-model-btn" data-testid="agent-model-btn">🧠 ${t('agent.switchModelTitle')}</button></li>
+          <li><button class="agent-autocompact-btn" data-testid="agent-autocompact-btn">🗜️ ${agent.autocompactOverride ? t('agent.autocompactTitle', { value: agent.autocompactOverride }) : t('agent.autocompactDefaultTitle', { value: effectiveDefaultAutocompact() })}</button></li>
           <li><button class="agent-open-folder-btn" data-testid="agent-open-folder-btn">📂 ${t('agent.openFolderTitle')}</button></li>
           <li><button class="agent-restart-btn" data-testid="agent-restart-btn" title="${t('agent.restartHint')}">🔄 ${t('agent.restartTitle')}</button></li>
           <li><button class="agent-remove-btn" data-testid="agent-remove-btn">× ${t('agent.removeFromChatTitle')}</button></li>
@@ -3110,6 +3132,7 @@ function renderAgentPanel() {
     });
     li.querySelector('.agent-note-btn').addEventListener('click', () => { closeAgentMenu(); openNoteModal(agent); });
     li.querySelector('.agent-model-btn').addEventListener('click', () => { closeAgentMenu(); changeAgentModel(agent); });
+    li.querySelector('.agent-autocompact-btn').addEventListener('click', () => { closeAgentMenu(); changeAgentAutocompact(agent); });
     li.querySelector('.agent-open-folder-btn').addEventListener('click', () => { closeAgentMenu(); openAgentFolder(agent); });
     li.querySelector('.agent-restart-btn').addEventListener('click', () => { closeAgentMenu(); restartAgent(agent); });
     li.querySelector('.agent-remove-btn').addEventListener('click', () => { closeAgentMenu(); removeMember(agent.id); });
@@ -3229,6 +3252,44 @@ async function changeAgentModel(agent) {
     const updated = /** @type {Agent} */ (await res.json());
     const idx = agents.findIndex((a) => a.id === agent.id);
     if (idx !== -1) agents[idx] = updated;
+  }
+  renderAgentPanel();
+}
+
+/**
+ * Prompts for this agent's own context-compaction window ("auto", or
+ * 100k–1M tokens; empty goes back to the Settings default) and, if it
+ * changed, PATCHes it. Can change at any point in the agent's life: the
+ * PATCH route restarts its process once any turn in progress finishes, and
+ * the next turn resumes the same session with the new window. See
+ * autocompactOverride's docs in server/store/db.js.
+ * @param {Agent} agent
+ * @returns {Promise<void>}
+ */
+async function changeAgentAutocompact(agent) {
+  const { confirmed, value } = await confirmDialog(
+    t('confirm.changeAutocompact', { name: agent.name, value: effectiveDefaultAutocompact() }),
+    {
+      textInput: { value: agent.autocompactOverride ?? '', placeholder: t('confirm.autocompactPlaceholder', { value: effectiveDefaultAutocompact() }), list: 'autocompact-presets' },
+      okLabel: t('confirm.changeAutocompactBtn'),
+    },
+  );
+  if (!confirmed) return;
+  const autocompactOverride = value.trim();
+  if (autocompactOverride === (agent.autocompactOverride ?? '')) return;
+
+  const res = await fetch(`/api/agents/${agent.id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ autocompactOverride }),
+  });
+  if (res.ok) {
+    const updated = /** @type {Agent} */ (await res.json());
+    const idx = agents.findIndex((a) => a.id === agent.id);
+    if (idx !== -1) agents[idx] = updated;
+  } else {
+    const body = await res.json().catch(() => ({}));
+    showAgentPanelError(body.error ?? t('errors.invalidAutocompact'));
   }
   renderAgentPanel();
 }
@@ -3894,6 +3955,8 @@ function openModal() {
   agentModelInput.value = '';
   agentModelCustomInput.value = '';
   agentModelCustomInput.hidden = true;
+  agentAutocompactInput.value = '';
+  agentAutocompactInput.placeholder = t('agentModal.autocompactPlaceholder', { value: effectiveDefaultAutocompact() });
   agentNoteInput.value = '';
   yoloModeCheck.checked = false;
   observerModeCheck.checked = false;
@@ -4008,11 +4071,15 @@ async function openSettingsModal() {
     selectedUserColor = settings.userColor;
     settingsLanguageSelect.value = settings.locale;
     settingsThemeSelect.value = settings.theme;
+    settingsAutocompactInput.value = settings.defaultAutocompact;
+    settingsAutocompactInput.placeholder = t('settingsModal.autocompactPlaceholder', { value: settings.autocompactFallback });
   } catch {
     settingsDisplayNameInput.value = '';
     selectedUserColor = userSettings.userColor;
     settingsLanguageSelect.value = currentLocale;
     settingsThemeSelect.value = userSettings.theme ?? 'dark';
+    settingsAutocompactInput.value = userSettings.defaultAutocompact ?? '';
+    settingsAutocompactInput.placeholder = t('settingsModal.autocompactPlaceholder', { value: userSettings.autocompactFallback });
   }
   renderColorGrid(settingsColorGrid, selectedUserColor, (c) => { selectedUserColor = c; });
   settingsOverlay.hidden = false;
@@ -4034,6 +4101,7 @@ async function handleSettingsFormSubmit(e) {
   const userColor = selectedUserColor;
   const locale = settingsLanguageSelect.value;
   const theme = settingsThemeSelect.value;
+  const defaultAutocompact = settingsAutocompactInput.value.trim();
 
   settingsSave.disabled = true;
   settingsError.hidden = true;
@@ -4041,7 +4109,7 @@ async function handleSettingsFormSubmit(e) {
     const res = await fetch('/api/settings', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userDisplayName, userColor, locale, theme }),
+      body: JSON.stringify({ userDisplayName, userColor, locale, theme, defaultAutocompact }),
     });
     if (!res.ok) {
       const body = await res.json();
@@ -4049,7 +4117,7 @@ async function handleSettingsFormSubmit(e) {
       settingsError.hidden = false;
       return;
     }
-    userSettings = { userDisplayName, userColor, locale, theme };
+    userSettings = /** @type {Settings} */ (await res.json());
     applyTheme(theme);
     // All four fields apply to the user's whole history/whole UI, not just
     // going forward (the server resolves authorName for user rows live, not
@@ -4191,6 +4259,7 @@ async function handleAgentFormSubmit(e) {
 
   const resumeId = agentResumeInput.value.trim() || undefined;
   const modelOverride = getModelSelectValue(agentModelInput, agentModelCustomInput) || undefined;
+  const autocompactOverride = agentAutocompactInput.value.trim() || undefined;
   const note = agentNoteInput.value.trim() || undefined;
   const dangerouslySkipPermissions = yoloModeCheck.checked;
   const isObserver = observerModeCheck.checked;
@@ -4203,7 +4272,7 @@ async function handleAgentFormSubmit(e) {
     const res = await fetch('/api/agents', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, color: selectedColor, workingDir, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess, note, modelOverride }),
+      body: JSON.stringify({ name, color: selectedColor, workingDir, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess, note, modelOverride, autocompactOverride }),
     });
     if (!res.ok) {
       const body = await res.json();
@@ -4885,6 +4954,9 @@ async function init() {
   appVersionEl.textContent = `v${APP_VERSION}`;
 
   renderColorGrid(colorGrid, selectedColor, (c) => { selectedColor = c; });
+  // Suggestions for every compaction-window field (agent menu, new-agent
+  // form, Settings); any other valid value can still be typed.
+  $('#autocompact-presets').replaceChildren(...AUTOCOMPACT_PRESETS.map((value) => Object.assign(document.createElement('option'), { value })));
 
   const [agentsRes, chatsRes, settingsRes, quickMessagesRes] = await Promise.all([
     fetch('/api/agents'),

@@ -1,11 +1,13 @@
 /**
- * @fileoverview E2E tests: user settings (display name and message color).
+ * @fileoverview E2E tests: user settings (display name, message color, theme,
+ * and the default context-compaction window).
  */
 
 import { test, describe, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { startServer, stopServer, resetData, TEST_PORT } from '../helpers/server.js';
-import { launchBrowser, closeBrowser, openPage, closePage, tid, createChat, sendMessage, reloadAndWaitForConnection } from '../helpers/browser.js';
+import { launchBrowser, closeBrowser, openPage, closePage, tid, createChat, createAgent, sendMessage, reloadAndWaitForConnection } from '../helpers/browser.js';
+import { agentDir, cleanupAgentDirs } from '../helpers/fixtures.js';
 
 describe('Settings', () => {
   /** @type {import('puppeteer').Page} */
@@ -19,6 +21,7 @@ describe('Settings', () => {
   after(async () => {
     await closeBrowser();
     await stopServer();
+    cleanupAgentDirs();
   });
 
   beforeEach(async () => {
@@ -236,6 +239,48 @@ describe('Settings', () => {
     await reloadAndWaitForConnection(page);
     const themeAfterReload = await page.evaluate(() => document.documentElement.dataset.theme);
     assert.equal(themeAfterReload, 'light', 'should survive a reload via the localStorage fast path');
+  });
+
+  test('the default compaction window is set in Settings, and an existing agent can override it from its menu', async () => {
+    await page.click(tid('settings-btn'));
+    await page.waitForFunction(
+      () => !document.querySelector('[data-testid="settings-overlay"]')?.hidden,
+      { timeout: 3000 }
+    );
+    await page.type(tid('settings-autocompact-input'), '300K');
+    await page.click(tid('settings-save'));
+    await page.waitForFunction(
+      () => document.querySelector('[data-testid="settings-overlay"]')?.hidden,
+      { timeout: 3000 }
+    );
+    const settings = await (await fetch(`http://localhost:${TEST_PORT}/api/settings`)).json();
+    assert.equal(settings.defaultAutocompact, '300k', 'saved in canonical form');
+
+    await createChat(page, 'Compaction Test');
+    await createAgent(page, { name: 'Ada', workingDir: agentDir('compaction') });
+    const menuLabel = () => page.$eval(tid('agent-autocompact-btn'), (el) => el.textContent.trim());
+    assert.match(await menuLabel(), /default \(300k\)/);
+
+    await page.click(tid('agent-menu-btn'));
+    await page.click(tid('agent-autocompact-btn'));
+    await page.waitForFunction(() => !document.querySelector('[data-testid="confirm-text-row"]')?.hidden, { timeout: 3000 });
+    await page.type(tid('confirm-text-input'), '400k');
+    await page.click(tid('confirm-ok'));
+    await page.waitForFunction(
+      () => /: 400k$/.test(document.querySelector('[data-testid="agent-autocompact-btn"]')?.textContent.trim() ?? ''),
+      { timeout: 5000 }
+    );
+    const [agent] = await (await fetch(`http://localhost:${TEST_PORT}/api/agents`)).json();
+    assert.equal(agent.autocompactOverride, '400k');
+  });
+
+  test('PUT /api/settings rejects a compaction window the CLI would refuse', async () => {
+    const res = await fetch(`http://localhost:${TEST_PORT}/api/settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userDisplayName: 'You', defaultAutocompact: '2M' }),
+    });
+    assert.equal(res.status, 400);
   });
 
   test('PUT /api/settings rejects an invalid theme', async () => {
