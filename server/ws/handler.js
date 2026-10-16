@@ -1171,7 +1171,10 @@ async function postCompactionNotes(chat, agent, compactions, wss) {
       role: 'agent',
       agentId: agent.id,
       authorName: agent.name,
-      content: `🗜️ Context compacted (${trigger}): ${tokenSummary}`,
+      // Named in the text itself: a system note renders as a plain centered
+      // line with no author shown, so without it there was no telling
+      // whose context was compacted.
+      content: `🗜️ ${agent.name}'s context was compacted (${trigger}): ${tokenSummary}`,
       attachments: [],
       toolCalls: [],
       isSystemNote: true,
@@ -1524,7 +1527,7 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, exc
         // message — fall back to a placeholder so the chat still shows
         // something happened.
         content: contextCleared
-          ? '🧹 Context cleared — starting a fresh session'
+          ? `🧹 ${agent.name}'s context was cleared — starting a fresh session`
           : (fullText || (stopped ? t('chat.stoppedEmptyPlaceholder') : '')),
         attachments: [],
         toolCalls,
