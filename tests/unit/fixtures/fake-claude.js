@@ -5,8 +5,11 @@
  * stdin line with a turn whose text is this process's pid and whose
  * session id is its `--resume` value (or "fresh"). Like the real CLI, it
  * takes a moment to exit after SIGTERM, which is the window the retiring
- * tests need.
+ * tests need. FAKE_CLAUDE_REPLY_DELAY_MS makes each turn take that long, so
+ * a test can queue turns behind a busy one.
  */
+
+const replyDelayMs = Number(process.env.FAKE_CLAUDE_REPLY_DELAY_MS) || 0;
 
 const resumeArg = process.argv.find((arg) => arg.startsWith('--resume='));
 const sessionId = resumeArg ? resumeArg.slice('--resume='.length) : 'fresh';
@@ -21,8 +24,10 @@ process.stdin.on('data', (chunk) => {
   for (const line of lines) {
     if (!line.trim()) continue;
     emit({ type: 'system', subtype: 'init' });
-    emit({ type: 'assistant', message: { id: `m${Date.now()}`, model: 'fake', content: [{ type: 'text', text: String(process.pid) }] } });
-    emit({ type: 'result', is_error: false, result: String(process.pid) });
+    setTimeout(() => {
+      emit({ type: 'assistant', message: { id: `m${Date.now()}`, model: 'fake', content: [{ type: 'text', text: String(process.pid) }] } });
+      emit({ type: 'result', is_error: false, result: String(process.pid) });
+    }, replyDelayMs);
   }
 });
 

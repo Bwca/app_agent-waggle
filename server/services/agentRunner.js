@@ -183,7 +183,9 @@ export function dedupePermissionDenials(denials) {
  * @typedef {Object} RunAgentStreamOptions
  * @property {import('../store/db.js').Agent} agent - The agent to run
  * @property {string} chatId - The chat context (for logging)
- * @property {ContentBlock[]} content - Full message content, including conversation context
+ * @property {import('./agentProcessManager.js').TurnContent} content - Full
+ *   message content, including conversation context, or a function that
+ *   builds it once the turn actually starts
  * @property {string} streamId - Unique ID for this streaming response
  * @property {(text: string) => void} onChunk - Called with each text delta
  * @property {(status: string) => void} [onStatus] - Called whenever the agent

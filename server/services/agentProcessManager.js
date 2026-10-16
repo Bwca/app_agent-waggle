@@ -597,12 +597,20 @@ export function spawnForAgent(agent) {
 }
 
 /**
+ * A turn's content, or a function that builds it. A function is called only
+ * once the turn actually starts — after every turn queued ahead of it on
+ * this agent's process has finished — so what it sends can reflect those
+ * turns (see ws/handler.js's runAgentsParallel for why that matters).
+ * @typedef {import('./agentRunner.js').ContentBlock[] | (() => import('./agentRunner.js').ContentBlock[])} TurnContent
+ */
+
+/**
  * Runs one turn against an existing (or freshly spawned) persistent
  * process, queued so it never overlaps another in-flight turn on the same
  * process's stdin. Mirrors the return shape the old one-shot
  * runAgentStream always returned.
  * @param {import('../store/db.js').Agent} agent
- * @param {import('./agentRunner.js').ContentBlock[]} content
+ * @param {TurnContent} content
  * @param {{ onChunk: (text: string) => void, onStatus?: (status: string) => void, signal?: AbortSignal }} options
  * @returns {Promise<{ text: string, permissionDenials: import('./agentRunner.js').PermissionDenial[], sessionId: string | null, stopped: boolean, toolCalls: ToolCall[], wasLocalCommand: boolean, contextCleared: boolean, usage: TurnUsage | null, contextTokens: number | null, totalCostUsd: number | null, durationMs: number | null, model: string | null, compactions: { trigger: 'auto' | 'manual', preTokens: number | null, postTokens: number | null }[] }>}
  */
@@ -630,12 +638,15 @@ export function runTurn(agent, content, { onChunk, onStatus, signal }) {
 
 /**
  * @param {ManagedProcess} proc
- * @param {import('./agentRunner.js').ContentBlock[]} content
+ * @param {TurnContent} content
  * @param {{ onChunk: (text: string) => void, onStatus?: (status: string) => void, signal?: AbortSignal }} options
  * @returns {Promise<{ text: string, permissionDenials: import('./agentRunner.js').PermissionDenial[], sessionId: string | null, stopped: boolean, toolCalls: ToolCall[], wasLocalCommand: boolean, contextCleared: boolean, usage: TurnUsage | null, contextTokens: number | null, totalCostUsd: number | null, durationMs: number | null, model: string | null, compactions: { trigger: 'auto' | 'manual', preTokens: number | null, postTokens: number | null }[] }>}
  */
 function runOneTurn(proc, content, { onChunk, onStatus, signal }) {
   return new Promise((resolve, reject) => {
+    // Built first, before this turn claims the process: if building throws,
+    // the turn just rejects, with nothing to unwind.
+    const blocks = typeof content === 'function' ? content() : content;
     const { provider } = proc;
     const turn = provider.createTurnAccumulator({ onChunk, onStatus });
     let stopped = false;
@@ -746,7 +757,7 @@ function runOneTurn(proc, content, { onChunk, onStatus, signal }) {
       },
     };
 
-    proc.child.stdin.write(provider.encodeTurn(content));
+    proc.child.stdin.write(provider.encodeTurn(blocks));
   });
 }
 
