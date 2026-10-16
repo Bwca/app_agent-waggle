@@ -331,7 +331,13 @@ export function createTurnAccumulator({ onChunk, onStatus } = {}) {
         // chat instead of it silently passing.
         const compaction = parseCompaction(event);
         if (compaction) turn.compactions.push(compaction);
-      } else if (event.type === 'system' && event.subtype === 'conversation_reset') {
+      } else if (event.type === 'conversation_reset' || (event.type === 'system' && event.subtype === 'conversation_reset')) {
+        // Since at least CLI 2.1.301 this is a top-level
+        // {"type":"conversation_reset"}, no longer a system subtype —
+        // confirmed against a raw stream-json run. Matching only the old
+        // shape missed every "/clear", so its empty result was saved as a
+        // blank reply. Both shapes are kept, for older CLIs.
+        //
         // A bare "/clear" — confirmed directly against the installed CLI
         // binary via a raw two-turn stream-json run, NOT the same shape as
         // "/chrome"/"/help" above (no synthetic assistant message at all).

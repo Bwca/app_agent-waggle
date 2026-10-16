@@ -83,6 +83,19 @@ describe('createTurnAccumulator — "/clear" (conversation_reset) handling', () 
     assert.equal(turn.sessionId, 'new-session', 'the turn must end up holding the ROTATED session id, not the one it started with');
   });
 
+  test('the top-level {"type":"conversation_reset"} shape newer CLIs emit sets contextCleared too', () => {
+    // Confirmed live against CLI 2.1.301: the reset is no longer a system
+    // subtype. Matching only the old shape missed every "/clear", and its
+    // empty result was saved as a blank reply.
+    const turn = createTurnAccumulator();
+    turn.handleEvent({ type: 'system', subtype: 'init', session_id: 'old-session' });
+    turn.handleEvent({ type: 'conversation_reset', session_id: 'old-session' });
+    turn.handleEvent({ type: 'system', subtype: 'init', session_id: 'new-session' });
+    turn.handleEvent({ type: 'result', result: '', session_id: 'new-session' });
+    assert.equal(turn.contextCleared, true);
+    assert.equal(turn.sessionId, 'new-session');
+  });
+
   test('an ordinary turn never sets contextCleared', () => {
     const turn = createTurnAccumulator();
     turn.handleEvent({ type: 'system', subtype: 'init', session_id: 'sess-1' });
