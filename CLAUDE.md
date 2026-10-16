@@ -90,7 +90,7 @@ Agents normally run with `--permission-mode acceptEdits` (or fully unrestricted 
 - File-path tools (`Write`/`Edit`/`Read`/`NotebookEdit`) widen `extraAllowedPaths` → `--add-dir` (granting the *containing directory*, since `--add-dir` on a file path is silently a no-op).
 - Everything else (`Bash`, etc.) derives `allowedToolPatterns` → `--allowedTools`, with Bash chains (`a && b`, pipes, `;`) split into one pattern per sub-command (`deriveToolPatterns`) so a multi-command denial doesn't accidentally under- or over-grant.
 
-Since a turn already ended by the time a denial is resolved (headless mode can't retry mid-turn), granting/denying auto-sends a synthetic follow-up message once every row in a multi-denial card is resolved (`buildContinueMessage`), not before.
+Since a turn already ended by the time a denial is resolved (headless mode can't retry mid-turn), granting/denying auto-sends a synthetic follow-up message once every row in a multi-denial card is resolved (`buildContinueMessage`), not before. A card's rows resolve one at a time per agent (`withPermissionLock`): "Grant all" sends every row in the same tick, and without that the auto-continuing row could spawn the retry between another row's pattern saves, missing part of a chained Bash grant.
 
 ### Auto-continue after a session limit
 
