@@ -629,7 +629,18 @@ export function runTurn(agent, content, { onChunk, onStatus, signal }) {
     proc = spawnProcess(agent);
   }
 
-  const turnPromise = proc.queue.then(() => runOneTurn(proc, content, { onChunk, onStatus, signal }));
+  const turnPromise = proc.queue.then(() => {
+    // The process can die while this turn waits behind another (a stop, a
+    // kill, a crash). Its exit has already fired by then, so a turn started
+    // on it would wait forever for an exit or a reply. Found via a hanging
+    // E2E reset: killAll waits for a retiring process's queued turns, and
+    // a turn stuck this way stalled it, and with it every later test.
+    if (!isAlive(proc)) {
+      const code = proc.child.exitCode ?? proc.child.signalCode;
+      throw new Error(t('errors.agentExitCode', { provider: proc.provider.displayName, code }));
+    }
+    return runOneTurn(proc, content, { onChunk, onStatus, signal });
+  });
   // Keep the queue chain alive regardless of this turn's outcome, so one
   // failed/rejected turn doesn't wedge every turn queued behind it.
   proc.queue = turnPromise.then(() => {}, () => {});
