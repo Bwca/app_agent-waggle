@@ -358,9 +358,10 @@ describe('Permission grants', () => {
     );
 
     // Now resolve the final row — THIS should trigger the auto-continue.
+    // Starts with, not equals — see the "Grant all" test below.
     await rowHandles[writeIdx].$eval('.perm-grant-btn', (btn) => btn.click());
     const responseText = await waitForAgentResponse(page, { timeout: 30_000 });
-    assert.equal(responseText, 'done');
+    assert.match(responseText, /^done\b/, `expected the reply to start with "done", got: ${JSON.stringify(responseText)}`);
 
     // Real, independently-observable side effects: BOTH actions ran, once
     // the card was fully resolved — proving the earlier grant (Bash) really
@@ -400,8 +401,11 @@ describe('Permission grants', () => {
 
     // No follow-up message typed — the bulk grant must, on its own, nudge
     // the agent to retry both actions it was just denied.
+    // Starts with, not equals: having said "done" the first time while
+    // both actions were actually blocked, the model sometimes adds a line
+    // correcting that. The side effects below are the real check.
     const responseText = await waitForAgentResponse(page, { timeout: 30_000 });
-    assert.equal(responseText, 'done');
+    assert.match(responseText, /^done\b/, `expected the reply to start with "done", got: ${JSON.stringify(responseText)}`);
 
     // Real, independently-observable side effects: BOTH actions ran off a
     // single click, proving the bulk grant actually authorized every row,
