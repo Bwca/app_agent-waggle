@@ -102,6 +102,16 @@ const OBSERVER_HISTORY_LIMIT = 1000;
 const FREE_RELAY_MAX_ROUNDS = 20;
 
 /**
+ * When each agent's last completed turn in each chat had its prompt built,
+ * keyed `${chatId}:${agentId}` — the boundary catchUpMessagesFor uses for
+ * what that agent has already seen (see its seenUntil docs). In memory
+ * only: after a restart it's empty, and catch-up falls back to the agent's
+ * own last reply, as before this existed.
+ * @type {Map<string, string>}
+ */
+const seenUntilByAgent = new Map();
+
+/**
  * @typedef {Object} UserMessageEvent
  * @property {'USER_MESSAGE'} type
  * @property {string} chatId
@@ -615,11 +625,6 @@ export async function handleUserMessage(event, wss) {
   const chat = getChat(chatId);
   if (!chat) return { userMessage: null, replies: [] };
 
-  // Captured BEFORE this turn's own message is persisted below, so that
-  // message never shows up twice — once here, once as the turn's own final
-  // content block (see buildPromptBlocks/runAgentsParallel).
-  const priorMessages = getMessages(chatId, 20);
-
   // Save user message
   /** @type {import('../store/db.js').Message} */
   const userMessage = {
@@ -655,7 +660,7 @@ export async function handleUserMessage(event, wss) {
   /** @type {NewUserMessage} */
   const newMessage = skillInvocation ? { content: skillInvocation.command, attachments } : originalMessage;
 
-  const respondedMessages = await runAgentsParallel(responders, members, chat, newMessage, wss, priorMessages, userMessage.id);
+  const respondedMessages = await runAgentsParallel(responders, members, chat, newMessage, wss, userMessage.id);
   const allReplies = [...respondedMessages.values()];
 
   // Relay: parse each round's just-saved agent responses for @mentions of
@@ -722,11 +727,6 @@ export async function handleUserMessage(event, wss) {
       break;
     }
 
-    // Freshly fetched each round (not the same priorMessages snapshot) — the
-    // previous round's replies are now persisted, and this round's targets'
-    // catch-up needs to include those, e.g. the teammate reply that
-    // @mentioned them.
-    const relayPriorMessages = getMessages(chatId, 20);
     // Grouped by triggering message so agents relayed by the same mention
     // still run together in one runAgentsParallel call; different mentions
     // run as separate parallel calls since each needs its own trigger
@@ -745,7 +745,6 @@ export async function handleUserMessage(event, wss) {
           currentChat,
           { content: message.content, attachments: message.attachments },
           wss,
-          relayPriorMessages,
           message.id
         )
       )
@@ -1185,30 +1184,41 @@ async function maybeScheduleAutoContinue(chat, agent, resetAt, wss) {
  * @param {import('../store/db.js').Chat} chat
  * @param {NewUserMessage} userMessage - The triggering user message
  * @param {WebSocketServer} wss
- * @param {import('../store/db.js').Message[]} priorMessages - Recent chat
- *   history. Narrowed per-agent in buildPromptBlocks — see catchUpMessagesFor.
  * @param {string} [excludeMessageId] - Forwarded to buildPromptBlocks — see
- *   its docs for why this is needed alongside priorMessages.
+ *   its docs.
  * @returns {Promise<Map<string, import('../store/db.js').Message>>}
  */
-async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, priorMessages, excludeMessageId) {
+async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, excludeMessageId) {
   const responded = new Map();
 
   await Promise.allSettled(agents.map(async (agent) => {
     const streamId = uuidv4();
-    // An observer needs far more than the normal 20-message catch-up window
-    // — see OBSERVER_HISTORY_LIMIT's docs. Fetched fresh per-agent here
-    // rather than widening the shared `priorMessages` param for everyone,
-    // since normal worker agents already have their own session memory via
-    // --resume and re-sending more than the recent window would be pure
-    // duplication for them (same reasoning catchUpMessagesFor's own docs
-    // give). This single override point covers every caller of
-    // runAgentsParallel — the main responders call, the relay call, and the
-    // GRANT_PERMISSION/DENY_PERMISSION auto-continue calls — without
-    // duplicating the fetch-size decision in each of them.
-    const agentPriorMessages = agent.isObserver ? getMessages(chat.id, OBSERVER_HISTORY_LIMIT) : priorMessages;
-    const content = buildPromptBlocks(agent, chat, allMembers, userMessage, agentPriorMessages, excludeMessageId);
-    logTranscript({ chatId: chat.id, agentId: agent.id, agentName: agent.name, streamId, direction: 'SENT', content });
+    const seenKey = `${chat.id}:${agent.id}`;
+    /** @type {string | null} */
+    let promptBuiltAt = null;
+    // Built when the turn actually starts, not now. A busy agent's turn
+    // waits behind the one it's running, and a prompt built at queue time
+    // is out of date by the time it's sent: reported live, an agent stuck
+    // in a nine-minute turn had six more queued, each carrying the same
+    // catch-up, and it answered every one as a "stale replay" — replies
+    // that @mentioned teammates and set off the same thing for them.
+    // Everything is read fresh here for the same reason (an earlier queued
+    // turn may have set resumeId, or the roster may have changed).
+    const buildContent = () => {
+      const freshAgent = getAgent(agent.id) ?? agent;
+      const freshChat = getChat(chat.id) ?? chat;
+      const freshMembers = freshChat.memberAgentIds.map((id) => getAgent(id)).filter(Boolean);
+      // An observer needs far more than the normal 20-message catch-up
+      // window — see OBSERVER_HISTORY_LIMIT's docs. Normal worker agents
+      // already have their own session memory via --resume, so re-sending
+      // more than the recent window would be pure duplication for them
+      // (same reasoning catchUpMessagesFor's own docs give).
+      const priorMessages = getMessages(chat.id, freshAgent.isObserver ? OBSERVER_HISTORY_LIMIT : 20);
+      promptBuiltAt = new Date().toISOString();
+      const content = buildPromptBlocks(freshAgent, freshChat, freshMembers, userMessage, priorMessages, excludeMessageId, seenUntilByAgent.get(seenKey));
+      logTranscript({ chatId: chat.id, agentId: agent.id, agentName: agent.name, streamId, direction: 'SENT', content });
+      return content;
+    };
     const controller = new AbortController();
     activeStreams.set(streamId, {
       controller,
@@ -1249,7 +1259,7 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, pri
       const { text: fullText, permissionDenials, sessionId, stopped, toolCalls, wasLocalCommand, contextCleared, usage, contextTokens, totalCostUsd, durationMs, model, compactions } = await runAgentStream({
         agent,
         chatId: chat.id,
-        content,
+        content: buildContent,
         streamId,
         signal: controller.signal,
         onChunk: (text) => {
@@ -1278,6 +1288,11 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, pri
         },
       });
       logTranscript({ chatId: chat.id, agentId: agent.id, agentName: agent.name, streamId, direction: 'RECEIVED', content: fullText });
+      // Only a turn the model actually ran counts as seen. A stopped turn
+      // may have been cut off before its prompt got anywhere, and a local
+      // command never reached the model: catching up from the older
+      // boundary re-sends a few lines, where moving it would lose them.
+      if (promptBuiltAt && !stopped && !wasLocalCommand) seenUntilByAgent.set(seenKey, promptBuiltAt);
 
       if (contextCleared && sessionId) {
         // A "/clear" rotated this agent's CLI session to a brand-new
@@ -1516,11 +1531,10 @@ export function handleConnection(ws, _req, wss) {
             const members = chat.memberAgentIds
               .map((id) => (id === agent.id ? agent : getAgent(id)))
               .filter(Boolean);
-            const priorMessages = getMessages(event.chatId, 20);
             const outcomes = Array.isArray(event.outcomes) && event.outcomes.length
               ? event.outcomes
               : [{ toolName: event.toolName, value: event.value, granted: true }];
-            await runAgentsParallel([agent], members, chat, buildContinueMessage(outcomes), wss, priorMessages);
+            await runAgentsParallel([agent], members, chat, buildContinueMessage(outcomes), wss);
           }
         }
         break;
@@ -1538,11 +1552,10 @@ export function handleConnection(ws, _req, wss) {
         const chat = getChat(event.chatId);
         if (!agent || !chat) break;
         const members = chat.memberAgentIds.map((id) => getAgent(id)).filter(Boolean);
-        const priorMessages = getMessages(event.chatId, 20);
         const outcomes = Array.isArray(event.outcomes) && event.outcomes.length
           ? event.outcomes
           : [{ toolName: event.toolName, value: event.value, granted: false }];
-        await runAgentsParallel([agent], members, chat, buildContinueMessage(outcomes), wss, priorMessages);
+        await runAgentsParallel([agent], members, chat, buildContinueMessage(outcomes), wss);
         break;
       }
       case 'STOP_AGENT': {
