@@ -484,6 +484,27 @@ export function handleUnsolicitedEvent(proc, event, signal = proc.provider.inspe
 }
 
 /**
+ * The context-compaction window from Settings, for agents with no override
+ * of their own (see Agent.autocompactOverride). Held here rather than read
+ * from the database on every spawn, since this module never touches the
+ * database itself: index.js sets it at startup, and PUT /api/settings
+ * whenever it changes.
+ * @type {string | null}
+ */
+let autocompactDefault = null;
+
+/**
+ * Sets the compaction window new processes get when their agent has no
+ * override of its own. Only affects processes spawned from now on — a
+ * running one keeps the window it started with until it's killed.
+ * @param {string | null} value - Already normalized, or null for the provider's own fallback
+ * @returns {void}
+ */
+export function setAutocompactDefault(value) {
+  autocompactDefault = value || null;
+}
+
+/**
  * Spawns a fresh persistent process for an agent and registers it. Does
  * NOT write anything to stdin — callers decide when a turn actually starts.
  * @param {import('../store/db.js').Agent} agent
@@ -492,7 +513,7 @@ export function handleUnsolicitedEvent(proc, event, signal = proc.provider.inspe
 function spawnProcess(agent) {
   const resumed = !!agent.resumeId;
   const provider = providerForAgent(agent);
-  const { command, args } = provider.spawnCommand(agent);
+  const { command, args } = provider.spawnCommand(agent, { autocompactDefault });
   const child = spawn(command, args, {
     cwd: agent.workingDir,
     env: { ...process.env },

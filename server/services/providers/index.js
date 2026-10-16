@@ -25,7 +25,10 @@ import { DEFAULT_PROVIDER_ID } from '../../public/agentProviders.js';
  * @typedef {Object} AgentProvider
  * @property {string} id - Stable key, stored per agent (see providerForAgent).
  * @property {string} displayName - Shown in user-facing errors.
- * @property {(agent: import('../../store/db.js').Agent) => { command: string, args: string[] }} spawnCommand
+ * @property {(agent: import('../../store/db.js').Agent, options?: { autocompactDefault?: string | null }) => { command: string, args: string[] }} spawnCommand -
+ *   `autocompactDefault` is the compaction window from Settings (see
+ *   setAutocompactDefault in agentProcessManager.js); a provider with no
+ *   such notion ignores it.
  * @property {() => { command: string, args: string[] }} versionCommand - A
  *   cheap no-model-call invocation, used to verify the binary resolves
  *   before an agent is created (see agentRunner.js's verifyProviderAvailable).

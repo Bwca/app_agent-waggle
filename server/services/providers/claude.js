@@ -19,8 +19,10 @@ const CLAUDE_BIN = process.env.CLAUDE_BIN || 'claude';
 
 /**
  * Context size, in the CLI's own `--autocompact` syntax, at which an agent's
- * session gets summarized. Overridable via APP_AUTOCOMPACT (the CLI accepts
- * 'auto', or 100k–1M, e.g. "300k" or "300000").
+ * session gets summarized, when neither the agent itself
+ * (agent.autocompactOverride) nor Settings (spawnCommand's
+ * `autocompactDefault`) says otherwise. Overridable via APP_AUTOCOMPACT
+ * (the CLI accepts 'auto', or 100k–1M, e.g. "300k" or "300000").
  *
  * Deliberately not 'auto': observed live, 'auto' only compacts near the
  * model's full window (one agent compacted at 967,457 → 11,406 tokens), so
@@ -31,7 +33,7 @@ const CLAUDE_BIN = process.env.CLAUDE_BIN || 'claude';
  * reply. A smaller window keeps each request cheap at the cost of
  * summarizing more often.
  */
-const AUTOCOMPACT_WINDOW = process.env.APP_AUTOCOMPACT || '200k';
+export const AUTOCOMPACT_WINDOW = process.env.APP_AUTOCOMPACT || '200k';
 
 /**
  * Turns a `result` event's `total_cost_usd` into the cost of just that turn.
@@ -63,9 +65,11 @@ export function withPerTurnCost(state, event) {
  * a workingDir/YOLO/resumeId PATCH) has to kill the live process so the
  * next turn respawns with the new flags.
  * @param {import('../../store/db.js').Agent} agent
+ * @param {{ autocompactDefault?: string | null }} [options] - The default
+ *   compaction window from Settings, for an agent with no override of its own.
  * @returns {string[]}
  */
-function buildArgs(agent) {
+function buildArgs(agent, { autocompactDefault } = {}) {
   const args = [
     '--print',
     '--input-format=stream-json',
@@ -75,7 +79,7 @@ function buildArgs(agent) {
     // cache grows past AUTOCOMPACT_WINDOW, instead of every request paying
     // to re-read a huge history in full. Lossy-but-graceful, unlike dropping
     // resumeId outright (which forgets everything).
-    '--autocompact', AUTOCOMPACT_WINDOW,
+    '--autocompact', agent.autocompactOverride || autocompactDefault || AUTOCOMPACT_WINDOW,
   ];
   if (agent.dangerouslySkipPermissions) {
     args.push('--dangerously-skip-permissions');
@@ -442,7 +446,7 @@ function inspectEvent(event) {
 export const claudeProvider = {
   id: 'claude',
   displayName: 'Claude',
-  spawnCommand: (agent) => ({ command: CLAUDE_BIN, args: buildArgs(agent) }),
+  spawnCommand: (agent, options) => ({ command: CLAUDE_BIN, args: buildArgs(agent, options) }),
   versionCommand: () => ({ command: CLAUDE_BIN, args: ['--version'] }),
   encodeTurn: (content) => JSON.stringify({ type: 'user', message: { role: 'user', content } }) + '\n',
   parseLine,

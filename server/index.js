@@ -8,7 +8,7 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import express from 'express';
 import { WebSocketServer } from 'ws';
-import { loadDb, resetAll, getChats, getAgent } from './store/db.js';
+import { loadDb, resetAll, getChats, getAgent, getDefaultAutocompact } from './store/db.js';
 import createAgentsRouter from './routes/agents.js';
 import createChatsRouter from './routes/chats.js';
 import browseRouter from './routes/browse.js';
@@ -17,7 +17,7 @@ import quickMessagesRouter from './routes/quickMessages.js';
 import { mountMcp } from './mcp/index.js';
 import { handleConnection } from './ws/handler.js';
 import { initScheduler } from './services/scheduler.js';
-import { spawnForAgent, killAll } from './services/agentProcessManager.js';
+import { spawnForAgent, killAll, setAutocompactDefault } from './services/agentProcessManager.js';
 import { logger } from './logger.js';
 import { APP_NAME } from './public/appName.js';
 
@@ -91,6 +91,7 @@ app.delete('/__reset', async (_req, res) => {
   // never accumulate/leak across a test file's many resetData() calls.
   await killAll();
   await resetAll();
+  setAutocompactDefault(null);
   res.json({ ok: true });
 });
 
@@ -129,6 +130,8 @@ process.on('SIGTERM', gracefulShutdown);
 process.on('SIGINT', gracefulShutdown);
 
 await loadDb();
+// Before initAgentProcesses, so the processes it re-arms start with it.
+setAutocompactDefault(getDefaultAutocompact());
 initScheduler(wss);
 initAgentProcesses();
 // Bound explicitly to loopback: agents can execute real shell/file tools

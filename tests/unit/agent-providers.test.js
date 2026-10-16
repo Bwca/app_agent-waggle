@@ -33,6 +33,17 @@ describe('Claude provider', () => {
     assert.ok(args.includes('--resume=s1'));
   });
 
+  test('the compaction window is the agent\'s own, else the Settings default, else the built-in one', () => {
+    const windowOf = (agent, options) => {
+      const { args } = claudeProvider.spawnCommand({ id: 'a', workingDir: '/work', ...agent }, options);
+      return args[args.indexOf('--autocompact') + 1];
+    };
+    assert.equal(windowOf({ autocompactOverride: '400k' }, { autocompactDefault: '150k' }), '400k');
+    assert.equal(windowOf({}, { autocompactDefault: '150k' }), '150k');
+    assert.equal(windowOf({}, { autocompactDefault: null }), process.env.APP_AUTOCOMPACT || '200k');
+    assert.equal(windowOf({}), process.env.APP_AUTOCOMPACT || '200k');
+  });
+
   test('writes one stream-json user message per turn', () => {
     const content = [{ type: 'text', text: 'hi' }];
     assert.equal(claudeProvider.encodeTurn(content), '{"type":"user","message":{"role":"user","content":[{"type":"text","text":"hi"}]}}\n');

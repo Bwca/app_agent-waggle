@@ -112,6 +112,12 @@ function transaction(fn) {
  *   model-specific, so a switch costs a one-time full cache rebuild, not a
  *   fresh conversation) — so changing it must evict the running process the
  *   same way those do (see PATCH /api/agents/:id's flagsChanged).
+ * @property {string} [autocompactOverride] - This agent's own context-compaction
+ *   window, passed to the CLI as `--autocompact` (see normalizeAutocompact in
+ *   public/autocompact.js for the accepted values). Undefined means "use the
+ *   default from Settings" (getDefaultAutocompact). Baked into spawn args
+ *   like modelOverride, so changing it evicts the running process; the next
+ *   turn resumes the same session with the new window.
  * @property {number} cumulativeCostUsd - Running total of the CLI's own
  *   `total_cost_usd` across every turn this agent has EVER run (successful
  *   or errored — an errored turn, e.g. a session-limit failure, still spent
@@ -279,6 +285,7 @@ CREATE TABLE IF NOT EXISTS agents (
   note TEXT,
   last_known_model TEXT,
   model_override TEXT,
+  autocompact_override TEXT,
   cumulative_cost_usd REAL NOT NULL DEFAULT 0,
   last_turn_cost_usd REAL,
   last_context_tokens INTEGER,
@@ -464,6 +471,18 @@ function migrateAgentsModelOverride() {
     .some((col) => col.name === 'model_override');
   if (hasColumn) return;
   db.exec('ALTER TABLE agents ADD COLUMN model_override TEXT');
+}
+
+/**
+ * Adds the `autocompact_override` column to `agents` if it's missing, same
+ * reasoning as migrateAgentsAllowedToolPatterns above.
+ * @returns {void}
+ */
+function migrateAgentsAutocompactOverride() {
+  const hasColumn = db.prepare("PRAGMA table_info(agents)").all()
+    .some((col) => col.name === 'autocompact_override');
+  if (hasColumn) return;
+  db.exec('ALTER TABLE agents ADD COLUMN autocompact_override TEXT');
 }
 
 /**
@@ -691,6 +710,7 @@ function rowToAgent(row) {
   if (row.note) agent.note = row.note;
   if (row.last_known_model) agent.model = row.last_known_model;
   if (row.model_override) agent.modelOverride = row.model_override;
+  if (row.autocompact_override) agent.autocompactOverride = row.autocompact_override;
   agent.cumulativeCostUsd = row.cumulative_cost_usd;
   if (row.last_turn_cost_usd != null) agent.lastTurnCostUsd = row.last_turn_cost_usd;
   if (row.last_context_tokens != null) agent.lastContextTokens = row.last_context_tokens;
@@ -846,6 +866,7 @@ export async function loadDb() {
   migrateAgentsNote();
   migrateAgentsLastKnownModel();
   migrateAgentsModelOverride();
+  migrateAgentsAutocompactOverride();
   migrateAgentsUsageStats();
   migrateAgentsLastTurnCost();
   migrateAgentsSessionLimitReset();
@@ -891,13 +912,13 @@ export function getAgent(id) {
 export async function createAgent(data) {
   const createdAt = new Date().toISOString();
   db.prepare(`
-    INSERT INTO agents (id, name, color, working_dir, resume_id, extra_allowed_paths, allowed_tool_patterns, dangerously_skip_permissions, is_observer, chrome_access, note, model_override, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO agents (id, name, color, working_dir, resume_id, extra_allowed_paths, allowed_tool_patterns, dangerously_skip_permissions, is_observer, chrome_access, note, model_override, autocompact_override, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     data.id, data.name, data.color, data.workingDir,
     data.resumeId ?? null, JSON.stringify(data.extraAllowedPaths ?? []),
     JSON.stringify(data.allowedToolPatterns ?? []), data.dangerouslySkipPermissions ? 1 : 0,
-    data.isObserver ? 1 : 0, data.chromeAccess ? 1 : 0, data.note ?? null, data.modelOverride ?? null, createdAt
+    data.isObserver ? 1 : 0, data.chromeAccess ? 1 : 0, data.note ?? null, data.modelOverride ?? null, data.autocompactOverride ?? null, createdAt
   );
   return getAgent(data.id);
 }
@@ -907,7 +928,7 @@ export async function createAgent(data) {
  * Only the fields present (and not undefined) in `updates` are written —
  * a partial PATCH never clobbers untouched columns.
  * @param {string} id
- * @param {Partial<Pick<Agent, 'name' | 'color' | 'workingDir' | 'resumeId' | 'extraAllowedPaths' | 'allowedToolPatterns' | 'dangerouslySkipPermissions' | 'isObserver' | 'chromeAccess' | 'note' | 'modelOverride'>>} updates
+ * @param {Partial<Pick<Agent, 'name' | 'color' | 'workingDir' | 'resumeId' | 'extraAllowedPaths' | 'allowedToolPatterns' | 'dangerouslySkipPermissions' | 'isObserver' | 'chromeAccess' | 'note' | 'modelOverride' | 'autocompactOverride'>>} updates
  * @returns {Promise<Agent | null>}
  */
 export async function updateAgent(id, updates) {
@@ -933,6 +954,7 @@ export async function updateAgent(id, updates) {
     chrome_access: updates.chromeAccess !== undefined ? (updates.chromeAccess ? 1 : 0) : undefined,
     note: updates.note,
     model_override: updates.modelOverride,
+    autocompact_override: updates.autocompactOverride,
     // A different session doesn't remember what the old one saw.
     seen_until: updates.resumeId !== undefined && updates.resumeId !== existing.resumeId ? null : undefined,
   };
@@ -1523,6 +1545,25 @@ export function getUserTheme() {
  */
 export async function setUserTheme(theme) {
   setSetting('theme', theme);
+}
+
+/**
+ * Returns the context-compaction window set in Settings for agents with no
+ * autocompactOverride of their own, or null when none is set (the
+ * provider's own fallback then applies — see providers/claude.js).
+ * @returns {string | null}
+ */
+export function getDefaultAutocompact() {
+  return getSetting('defaultAutocompact', null);
+}
+
+/**
+ * Sets the default context-compaction window. An empty string clears it.
+ * @param {string} value - Already normalized (see normalizeAutocompact), or ''
+ * @returns {Promise<void>}
+ */
+export async function setDefaultAutocompact(value) {
+  setSetting('defaultAutocompact', value);
 }
 
 // ─── Scheduled Messages ─────────────────────────────────────────────────────
