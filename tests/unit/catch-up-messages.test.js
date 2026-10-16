@@ -115,3 +115,43 @@ describe('catchUpMessagesFor', () => {
     assert.deepEqual(result.map((m) => m.id), ['5'], 'the post-clear reply is a genuine memory boundary, so only what came after it is new');
   });
 });
+
+describe('catchUpMessagesFor — seenUntil', () => {
+  const at = (iso) => ({ createdAt: iso });
+
+  test('a message posted while the agent\'s turn was running still reaches it, though it predates the agent\'s reply', () => {
+    const agent = { id: 'claus', name: 'Claus', resumeId: 'sess-1' };
+    const messages = [
+      msg('1', null, 'seen before the turn', at('2026-10-16T01:00:00.000Z')),
+      msg('2', 'clay', 'posted mid-turn', at('2026-10-16T01:05:00.000Z')),
+      msg('3', 'claus', 'the long turn\'s reply', at('2026-10-16T01:08:00.000Z')),
+      msg('4', null, 'posted after', at('2026-10-16T01:09:00.000Z')),
+    ];
+    const caughtUp = catchUpMessagesFor(agent, messages, '2026-10-16T01:01:00.000Z').map((m) => m.id);
+    assert.deepEqual(caughtUp, ['2', '4']);
+  });
+
+  test('nothing already seen is re-sent', () => {
+    const agent = { id: 'claus', name: 'Claus', resumeId: 'sess-1' };
+    const messages = [msg('1', null, 'old', at('2026-10-16T01:00:00.000Z')), msg('2', 'clay', 'also old', at('2026-10-16T01:00:30.000Z'))];
+    assert.deepEqual(catchUpMessagesFor(agent, messages, '2026-10-16T01:01:00.000Z'), []);
+  });
+
+  test('a message saved in the same millisecond as the prompt build is re-sent rather than risked', () => {
+    const agent = { id: 'claus', name: 'Claus', resumeId: 'sess-1' };
+    const messages = [msg('1', null, 'same instant', at('2026-10-16T01:01:00.000Z'))];
+    assert.deepEqual(catchUpMessagesFor(agent, messages, '2026-10-16T01:01:00.000Z').map((m) => m.id), ['1']);
+  });
+
+  test('a "/clear" after seenUntil voids it — back to the reply boundary rules', () => {
+    const agent = { id: 'claus', name: 'Claus', resumeId: 'sess-2', contextResetAt: '2026-10-16T01:02:00.000Z' };
+    const messages = [msg('1', null, 'before the clear', at('2026-10-16T01:00:00.000Z')), msg('2', null, 'after', at('2026-10-16T01:03:00.000Z'))];
+    assert.deepEqual(catchUpMessagesFor(agent, messages, '2026-10-16T01:01:00.000Z').map((m) => m.id), ['1', '2']);
+  });
+
+  test('ignored for an agent with no session yet — the full window still goes out', () => {
+    const agent = { id: 'claus', name: 'Claus' };
+    const messages = [msg('1', null, 'old', at('2026-10-16T01:00:00.000Z'))];
+    assert.deepEqual(catchUpMessagesFor(agent, messages, '2026-10-16T01:01:00.000Z'), messages);
+  });
+});

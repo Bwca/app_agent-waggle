@@ -366,12 +366,28 @@ function renderHistoryLine(m) {
  * spoken again since clearing, that search comes up empty and the full
  * window goes out, same as a never-resumed agent.
  *
+ * When `seenUntil` is known — the moment this agent's last completed turn
+ * here had its prompt built — it's the boundary instead of the agent's own
+ * last reply. The reply is the wrong boundary for a busy agent: anything
+ * posted while its turn was running predates that reply but never reached
+ * it, and with the prompt now built when a queued turn starts (see
+ * runAgentsParallel) that content would otherwise be skipped. A "/clear"
+ * after `seenUntil` voids it the same way it voids a reply boundary.
+ *
  * @param {import('../store/db.js').Agent} agent
  * @param {import('../store/db.js').Message[]} messages - Chronological (oldest first)
+ * @param {string} [seenUntil] - ISO 8601 instant; see above.
  * @returns {import('../store/db.js').Message[]}
  */
-export function catchUpMessagesFor(agent, messages) {
+export function catchUpMessagesFor(agent, messages, seenUntil) {
   if (!agent.resumeId) return messages;
+
+  // `>=`, not `>`: a message saved in the same millisecond the prompt was
+  // built may or may not have made it in. Re-sending it costs a line;
+  // dropping it loses it.
+  if (seenUntil && (!agent.contextResetAt || seenUntil > agent.contextResetAt)) {
+    return messages.filter((m) => m.createdAt >= seenUntil && m.agentId !== agent.id && !m.isSystemNote);
+  }
 
   let lastOwnIdx = -1;
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -512,9 +528,10 @@ function buildSystemPreamble(agent, chat, members) {
  *   was derived from, if it's already been persisted. Filtered out of
  *   priorMessages regardless of fetch timing, so it's never sent once as
  *   catch-up context AND again as this turn's own final content block.
+ * @param {string} [seenUntil] - Forwarded to catchUpMessagesFor — see its docs.
  * @returns {import('../services/agentRunner.js').ContentBlock[]}
  */
-export function buildPromptBlocks(agent, chat, members, newMessage, priorMessages, excludeMessageId) {
+export function buildPromptBlocks(agent, chat, members, newMessage, priorMessages, excludeMessageId, seenUntil) {
   // isLocalCommandOnly/isSystemNote messages don't count — see
   // catchUpMessagesFor's docs on why they can't be trusted as evidence the
   // model ever saw anything sent alongside them, preamble included.
@@ -532,7 +549,7 @@ export function buildPromptBlocks(agent, chat, members, newMessage, priorMessage
   const filteredPriorMessages = excludeMessageId
     ? priorMessages.filter((m) => m.id !== excludeMessageId)
     : priorMessages;
-  const catchUp = catchUpMessagesFor(agent, filteredPriorMessages);
+  const catchUp = catchUpMessagesFor(agent, filteredPriorMessages, seenUntil);
   const sectionLabel = hasSpokenInChat ? 'Since you last responded' : 'Conversation context';
   const contextSection = catchUp.length
     ? `[${sectionLabel}]\n${catchUp.map(renderHistoryLine).join('\n')}\n---`
