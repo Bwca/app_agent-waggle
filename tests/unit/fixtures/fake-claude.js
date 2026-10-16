@@ -8,7 +8,8 @@
  * tests need. FAKE_CLAUDE_REPLY_DELAY_MS makes each turn take that long, so
  * a test can queue turns behind a busy one. FAKE_CLAUDE_REPLY replaces the
  * reply text (see "{turn}" below), and FAKE_CLAUDE_PROMPT_DIR records each turn's stdin line as
- * `<cwd basename>-<turn number>.json` there.
+ * `<cwd basename>-<turn number>.json` there. FAKE_CLAUDE_ARGS_DIR records
+ * this process's command-line arguments as `<cwd basename>-<pid>.json`.
  */
 
 import { writeFileSync } from 'node:fs';
@@ -17,6 +18,9 @@ import { basename, join } from 'node:path';
 const replyDelayMs = Number(process.env.FAKE_CLAUDE_REPLY_DELAY_MS) || 0;
 const promptDir = process.env.FAKE_CLAUDE_PROMPT_DIR;
 let turnNumber = 0;
+if (process.env.FAKE_CLAUDE_ARGS_DIR) {
+  writeFileSync(join(process.env.FAKE_CLAUDE_ARGS_DIR, `${basename(process.cwd())}-${process.pid}.json`), JSON.stringify(process.argv.slice(2)));
+}
 
 const resumeArg = process.argv.find((arg) => arg.startsWith('--resume='));
 const sessionId = resumeArg ? resumeArg.slice('--resume='.length) : 'fresh';
