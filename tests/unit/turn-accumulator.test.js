@@ -1,6 +1,6 @@
 /**
  * @fileoverview Unit tests for createTurnAccumulator (server/services/
- * agentProcessManager.js)'s `result` event handling — a pure function, no
+ * providers/claude.js)'s `result` event handling — a pure function, no
  * `claude` subprocess involved.
  *
  * Context: confirmed live against the real CLI that a `result` event isn't
@@ -16,7 +16,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { createTurnAccumulator } from '../../server/services/agentProcessManager.js';
+import { createTurnAccumulator } from '../../server/services/providers/claude.js';
 
 describe('createTurnAccumulator — result event error detection', () => {
   test('a successful result event leaves errorMessage null', () => {

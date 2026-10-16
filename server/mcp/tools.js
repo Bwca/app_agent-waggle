@@ -36,7 +36,8 @@ import {
   getMessages,
   searchMessages,
 } from '../store/db.js';
-import { verifyClaudeBinAvailable } from '../services/agentRunner.js';
+import { verifyProviderAvailable } from '../services/agentRunner.js';
+import { providerForAgent } from '../services/providers/index.js';
 import { spawnForAgent, killAgent } from '../services/agentProcessManager.js';
 import { handleUserMessage, broadcast, postAgentRemovedNote, postAgentAddedNote } from '../ws/handler.js';
 import { t } from '../i18n/t.js';
@@ -293,7 +294,7 @@ export function registerTools(mcpServer, wss) {
     },
     async ({ name, color, workingDir, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess, note, modelOverride }) => {
       if (!existsSync(workingDir)) return fail(t('errors.agentDirNotFound', { path: workingDir }));
-      const verified = await verifyClaudeBinAvailable();
+      const verified = await verifyProviderAvailable();
       if (!verified.ok) return fail(t('errors.agentVerifyFailed', { message: verified.error }));
       const data = { id: uuidv4(), name, color, workingDir };
       if (resumeId) data.resumeId = resumeId;
@@ -331,7 +332,7 @@ export function registerTools(mcpServer, wss) {
 
       if (workingDir !== undefined && workingDir !== existing.workingDir) {
         if (!existsSync(workingDir)) return fail(t('errors.agentDirNotFound', { path: workingDir }));
-        const verified = await verifyClaudeBinAvailable();
+        const verified = await verifyProviderAvailable(providerForAgent(existing));
         if (!verified.ok) return fail(t('errors.agentVerifyFailed', { message: verified.error }));
       }
       const trimmedModelOverride = modelOverride !== undefined ? modelOverride.trim() : undefined;

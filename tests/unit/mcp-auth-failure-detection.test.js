@@ -1,5 +1,5 @@
 /**
- * @fileoverview Unit tests for looksLikeMcpAuthFailure (server/services/agentProcessManager.js)
+ * @fileoverview Unit tests for looksLikeMcpAuthFailure (server/services/providers/claude.js)
  * — a pure function, no `claude` subprocess involved.
  *
  * Reported live: a user re-authenticated an MCP server (Linear) via `/login`
@@ -14,7 +14,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { looksLikeMcpAuthFailure } from '../../server/services/agentProcessManager.js';
+import { looksLikeMcpAuthFailure } from '../../server/services/providers/claude.js';
 
 describe('looksLikeMcpAuthFailure', () => {
   test('matches the exact wording embedded in the claude CLI binary', () => {

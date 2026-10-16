@@ -27,6 +27,7 @@ import {
   onBackgroundTurn,
   onBackgroundError,
 } from '../../server/services/agentProcessManager.js';
+import { claudeProvider } from '../../server/services/providers/claude.js';
 
 describe('handleUnsolicitedEvent — background turn vs background error routing', () => {
   const agentId = 'test-agent-background-unprompted';
@@ -41,7 +42,7 @@ describe('handleUnsolicitedEvent — background turn vs background error routing
   });
 
   test('a genuine unprompted completion (e.g. a backgrounded Bash task finishing) fires onBackgroundTurn, not onBackgroundError', () => {
-    const proc = { agentId, background: null };
+    const proc = { agentId, provider: claudeProvider, background: null };
     handleUnsolicitedEvent(proc, {
       type: 'assistant',
       message: { id: 'm1', content: [{ type: 'text', text: 'The background command finished.' }] },
@@ -54,7 +55,7 @@ describe('handleUnsolicitedEvent — background turn vs background error routing
   });
 
   test('an unprompted background retry that errors on a still-active session limit fires onBackgroundError, never onBackgroundTurn', () => {
-    const proc = { agentId, background: null };
+    const proc = { agentId, provider: claudeProvider, background: null };
     // Mirrors the real incident's shape: a tool call completes, then the
     // model call meant to summarize/report hits the session limit.
     handleUnsolicitedEvent(proc, {
@@ -83,7 +84,7 @@ describe('handleUnsolicitedEvent — background turn vs background error routing
   });
 
   test('a background result that errors with no preceding content is still routed to onBackgroundError, not silently dropped', () => {
-    const proc = { agentId, background: null };
+    const proc = { agentId, provider: claudeProvider, background: null };
     handleUnsolicitedEvent(proc, { type: 'result', is_error: true, errors: ['boom'] });
 
     assert.equal(turnCalls.length, 0);
@@ -92,7 +93,7 @@ describe('handleUnsolicitedEvent — background turn vs background error routing
   });
 
   test('repeated errored retries each fire onBackgroundError independently (no dedup/suppression at this layer)', () => {
-    const proc = { agentId, background: null };
+    const proc = { agentId, provider: claudeProvider, background: null };
     for (let i = 0; i < 3; i += 1) {
       handleUnsolicitedEvent(proc, { type: 'result', is_error: true, errors: ['still limited'] });
     }

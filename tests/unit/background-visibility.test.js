@@ -20,6 +20,7 @@ import {
   onBackgroundStream,
   onBackgroundTasksChanged,
 } from '../../server/services/agentProcessManager.js';
+import { claudeProvider } from '../../server/services/providers/claude.js';
 
 describe('applyBackgroundTasksChanged', () => {
   const agentId = 'test-agent-bg-tasks';
@@ -31,20 +32,20 @@ describe('applyBackgroundTasksChanged', () => {
   });
 
   test('maps the CLI\'s own background_tasks_changed shape (captured live) and reports the full list', () => {
-    const proc = { agentId };
-    applyBackgroundTasksChanged(proc, {
+    const proc = { agentId, provider: claudeProvider };
+    applyBackgroundTasksChanged(proc, claudeProvider.inspectEvent({
       type: 'system',
       subtype: 'background_tasks_changed',
       tasks: [{ task_id: 'b0muwra4y', run_id: 'x', task_type: 'local_bash', description: 'Sleep 15 seconds then echo done' }],
-    });
+    }).backgroundTasks);
     const expected = [{ id: 'b0muwra4y', type: 'local_bash', description: 'Sleep 15 seconds then echo done' }];
     assert.deepEqual(proc.backgroundTasks, expected);
     assert.deepEqual(calls, [expected]);
   });
 
   test('an empty list (task finished) clears it', () => {
-    const proc = { agentId, backgroundTasks: [{ id: 'a', type: 'local_bash', description: 'x' }] };
-    applyBackgroundTasksChanged(proc, { type: 'system', subtype: 'background_tasks_changed', tasks: [] });
+    const proc = { agentId, provider: claudeProvider, backgroundTasks: [{ id: 'a', type: 'local_bash', description: 'x' }] };
+    applyBackgroundTasksChanged(proc, claudeProvider.inspectEvent({ type: 'system', subtype: 'background_tasks_changed', tasks: [] }).backgroundTasks);
     assert.deepEqual(proc.backgroundTasks, []);
     assert.deepEqual(calls, [[]]);
   });
@@ -73,7 +74,7 @@ describe('handleUnsolicitedEvent — live streaming of a self-resumed turn', () 
   });
 
   test('opens a stream on the first event, feeds it live, and hands its streamId to onBackgroundTurn', () => {
-    const proc = { agentId, background: null };
+    const proc = { agentId, provider: claudeProvider, background: null };
     handleUnsolicitedEvent(proc, {
       type: 'assistant',
       message: { id: 'm1', content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'npm test' } }] },
@@ -95,7 +96,7 @@ describe('handleUnsolicitedEvent — live streaming of a self-resumed turn', () 
   });
 
   test('a background error passes its streamId to onBackgroundError', () => {
-    const proc = { agentId, background: null };
+    const proc = { agentId, provider: claudeProvider, background: null };
     handleUnsolicitedEvent(proc, {
       type: 'assistant',
       message: { id: 'm1', content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'x' } }] },
@@ -106,7 +107,7 @@ describe('handleUnsolicitedEvent — live streaming of a self-resumed turn', () 
   });
 
   test('a contentless unsolicited turn discards its stream instead of leaving it open', () => {
-    const proc = { agentId, background: null };
+    const proc = { agentId, provider: claudeProvider, background: null };
     handleUnsolicitedEvent(proc, { type: 'assistant', message: { id: 'm1', content: [] } });
     handleUnsolicitedEvent(proc, { type: 'result', is_error: false, result: '' });
     assert.equal(turnCalls.length, 0);

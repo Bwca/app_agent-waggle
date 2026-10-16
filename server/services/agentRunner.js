@@ -5,7 +5,7 @@
  * extraAllowedPaths; non-file tool calls (Bash, etc.) are separately scoped
  * via allowedToolPatterns.
  *
- * Actually talking to `claude` (spawning, keeping a process alive across
+ * Actually talking to the agent's CLI (spawning, keeping a process alive across
  * turns, stream-json parsing) lives in agentProcessManager.js — every
  * agent gets ONE persistent process for as long as it's in a chat, instead
  * of a fresh one-shot process per turn, so MCP servers (and anything else
@@ -17,11 +17,8 @@
 
 import { spawn } from 'child_process';
 import { runTurn } from './agentProcessManager.js';
+import { getProvider } from './providers/index.js';
 import { t } from '../i18n/t.js';
-
-// Resolved from PATH by default so this works on any machine; override via
-// env var if a machine's `claude` isn't on PATH under the expected name.
-const CLAUDE_BIN = process.env.CLAUDE_BIN || 'claude';
 
 // Tool names whose permission_denials carry a real filesystem path
 // (tool_input.file_path) — these are the ones `extraAllowedPaths`/`--add-dir`
@@ -138,7 +135,7 @@ export function dedupePermissionDenials(denials) {
  * @property {boolean} wasLocalCommand - True if the `claude` CLI's own
  *   local-command dispatcher (not this project's skill mechanism)
  *   intercepted this turn before the model saw it — see
- *   agentProcessManager.js's createTurnAccumulator and
+ *   providers/claude.js's createTurnAccumulator and
  *   db.js's Message.isLocalCommandOnly for why callers need this.
  * @property {boolean} contextCleared - True if this turn was a bare
  *   "/clear" the CLI's own local-command dispatcher intercepted — a
@@ -146,7 +143,7 @@ export function dedupePermissionDenials(denials) {
  *   message; a "system"/"conversation_reset" event instead), and one that
  *   genuinely rotates `sessionId` to a brand-new CLI session rather than
  *   just intercepting a turn within the existing one. See
- *   agentProcessManager.js's createTurnAccumulator and
+ *   providers/claude.js's createTurnAccumulator and
  *   store/db.js's recordContextClear for why callers need this distinct
  *   from wasLocalCommand.
  * @property {import('./agentProcessManager.js').TurnUsage | null} usage - Token
@@ -163,7 +160,7 @@ export function dedupePermissionDenials(denials) {
  * @property {{ trigger: 'auto' | 'manual', preTokens: number | null, postTokens: number | null }[]} compactions -
  *   Every context-compaction the CLI's own --autocompact (or a manual
  *   /compact) reported during this turn — see
- *   agentProcessManager.js's createTurnAccumulator. Usually empty.
+ *   providers/claude.js's createTurnAccumulator. Usually empty.
  */
 
 /**
@@ -214,30 +211,33 @@ export function runAgentStream({ agent, content, onChunk, onStatus, signal }) {
 }
 
 /**
- * Cheaply verifies the `claude` binary itself actually resolves and runs —
- * spawns `claude --version`, no model call, no cwd/session involved, so it
- * costs no tokens and takes milliseconds. Used before persisting an agent
- * to catch a broken/missing CLAUDE_BIN (the other half of what broke agent
- * creation last time, alongside a missing workingDir, which is checked
- * separately via existsSync). Deliberately does NOT verify resumeId — an
- * invalid resume id is the user's call and surfaces at message-send time
- * instead of blocking creation with a real, costly round-trip.
+ * Cheaply verifies a provider's binary itself actually resolves and runs —
+ * spawns its versionCommand (`claude --version` for Claude), no model call,
+ * no cwd/session involved, so it costs no tokens and takes milliseconds.
+ * Used before persisting an agent to catch a broken/missing binary, e.g. a
+ * bad CLAUDE_BIN (the other half of what broke agent creation last time,
+ * alongside a missing workingDir, which is checked separately via
+ * existsSync). Deliberately does NOT verify resumeId — an invalid resume
+ * id is the user's call and surfaces at message-send time instead of
+ * blocking creation with a real, costly round-trip.
  *
+ * @param {import('./providers/index.js').AgentProvider} [provider]
  * @returns {Promise<{ ok: true } | { ok: false, error: string }>}
  */
-export async function verifyClaudeBinAvailable() {
+export async function verifyProviderAvailable(provider = getProvider()) {
+  const { command, args } = provider.versionCommand();
   return new Promise((resolve) => {
-    const child = spawn(CLAUDE_BIN, ['--version'], { stdio: ['ignore', 'ignore', 'pipe'] });
+    const child = spawn(command, args, { stdio: ['ignore', 'ignore', 'pipe'] });
     let stderr = '';
     child.stderr.setEncoding('utf-8');
     child.stderr.on('data', (chunk) => { stderr += chunk; });
 
     child.on('error', (err) => {
-      resolve({ ok: false, error: t('errors.claudeSpawnFailed', { message: err.message }) });
+      resolve({ ok: false, error: t('errors.agentSpawnFailed', { provider: provider.displayName, message: err.message }) });
     });
     child.on('close', (code) => {
       if (code !== 0) {
-        resolve({ ok: false, error: stderr.trim() || t('errors.claudeExitCode', { code }) });
+        resolve({ ok: false, error: stderr.trim() || t('errors.agentExitCode', { provider: provider.displayName, code }) });
         return;
       }
       resolve({ ok: true });

@@ -13,6 +13,7 @@ import {
   onBackgroundError,
   onBackgroundUsage,
 } from '../../server/services/agentProcessManager.js';
+import { claudeProvider } from '../../server/services/providers/claude.js';
 
 describe('handleUnsolicitedEvent — background usage reporting', () => {
   const agentId = 'test-agent-background-usage';
@@ -43,7 +44,7 @@ describe('handleUnsolicitedEvent — background usage reporting', () => {
   });
 
   test('a real background reply reports its usage', () => {
-    const proc = { agentId, background: null };
+    const proc = { agentId, provider: claudeProvider, background: null };
     handleUnsolicitedEvent(proc, assistant('The background command finished.'));
     handleUnsolicitedEvent(proc, result({ result: 'The background command finished.' }));
 
@@ -55,7 +56,7 @@ describe('handleUnsolicitedEvent — background usage reporting', () => {
   });
 
   test('an errored background retry still reports what it spent', () => {
-    const proc = { agentId, background: null };
+    const proc = { agentId, provider: claudeProvider, background: null };
     handleUnsolicitedEvent(proc, assistant(''));
     handleUnsolicitedEvent(proc, result({ is_error: true, errors: ["You've hit your session limit"] }));
 
@@ -65,7 +66,7 @@ describe('handleUnsolicitedEvent — background usage reporting', () => {
   });
 
   test('a background turn with nothing to post still reports its usage', () => {
-    const proc = { agentId, background: null };
+    const proc = { agentId, provider: claudeProvider, background: null };
     handleUnsolicitedEvent(proc, assistant(''));
     handleUnsolicitedEvent(proc, result({ result: '' }));
 

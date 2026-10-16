@@ -7,6 +7,7 @@ import { DICTS, DEFAULT_LOCALE, translate } from './i18n/index.js';
 import { renderMarkdown } from './markdown.js';
 import { APP_NAME } from './appName.js';
 import { APP_VERSION } from './appVersion.js';
+import { DEFAULT_PROVIDER_ID, nameGeneratorFor } from './agentProviders.js';
 
 // ─── Types (JSDoc only) ─────────────────────────────────────────────────────
 
@@ -539,14 +540,6 @@ const MAX_BACKOFF = 30_000;
 const PRESET_COLORS = [
   '#89b4fa', '#a6e3a1', '#fab387', '#f38ba8',
   '#cba6f7', '#f9e2af', '#89dceb', '#b4befe',
-];
-
-const CLA_NAMES = [
-  'Claire', 'Clara', 'Clarabelle', 'Clarence', 'Clarissa', 'Clark', 'Clarke',
-  'Claude', 'Claudia', 'Claudette', 'Claudio', 'Claudius', 'Clay', 'Clayton',
-  'Clancy', 'Clarion', 'Clarity', 'Claybourne',
-  'Claudine', 'Claudina', 'Claus', 'Claudie', 'Claudiu', 'Claudell',
-  'Claudelle', 'Claudian', 'Clavius', 'Claudel', 'Claudiano', 'Claudino',
 ];
 
 // ─── DOM refs ───────────────────────────────────────────────────────────────
@@ -3982,21 +3975,15 @@ function renderColorGrid(container, selected, onSelect) {
 }
 
 /**
- * Picks a random "Cla…"-prefixed name for a new agent, avoiding collisions
- * with existing agent names. Falls back to a numbered suffix if every name
- * in the pool is already taken.
+ * Picks a default name for a new agent from its provider's pool (see
+ * agentProviders.js), avoiding collisions with every existing agent's name.
+ * The create form has no provider choice yet, so new agents are always the
+ * default provider.
+ * @param {string} [providerId]
  * @returns {string}
  */
-function generateAgentName() {
-  const taken = new Set(agents.map((a) => a.name.toLowerCase()));
-  const pool = CLA_NAMES.filter((n) => !taken.has(n.toLowerCase()));
-  if (pool.length) return pool[Math.floor(Math.random() * pool.length)];
-
-  // Every pool name is taken — suffix a random one with a number until unique.
-  const base = CLA_NAMES[Math.floor(Math.random() * CLA_NAMES.length)];
-  let n = 2;
-  while (taken.has(`${base} ${n}`.toLowerCase())) n++;
-  return `${base} ${n}`;
+function generateAgentName(providerId = DEFAULT_PROVIDER_ID) {
+  return nameGeneratorFor(providerId)(agents.map((a) => a.name));
 }
 
 // ─── Settings modal ─────────────────────────────────────────────────────────

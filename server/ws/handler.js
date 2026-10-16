@@ -1352,7 +1352,7 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, pri
           stopped,
           permissionDenials: dedupedDenials.map((d) => d.tool_name),
           // Token accounting straight from the CLI's own `result` event —
-          // see agentProcessManager.js's createTurnAccumulator. This (plus
+          // see providers/claude.js's createTurnAccumulator. This (plus
           // the mirrored fields on 'turn errored' below) is what makes a
           // token-burn incident (e.g. a shared account's session limit
           // getting exhausted by concurrent agent turns) debuggable from

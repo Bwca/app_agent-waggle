@@ -1,6 +1,6 @@
 /**
  * @fileoverview Unit tests for withPerTurnCost (server/services/
- * agentProcessManager.js). Confirmed against the real CLI: a persistent
+ * providers/claude.js). Confirmed against the real CLI: a persistent
  * stream-json process reports `total_cost_usd` as a running total for the
  * whole process, not per turn, so it has to be converted before anything
  * records it as one turn's cost.
@@ -8,7 +8,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { withPerTurnCost } from '../../server/services/agentProcessManager.js';
+import { withPerTurnCost } from '../../server/services/providers/claude.js';
 
 describe('withPerTurnCost', () => {
   test('converts the running total into each turn\'s own cost', () => {
