@@ -342,6 +342,35 @@ function buildContinueMessage(rawOutcomes) {
 }
 
 /**
+ * Tail of each agent's queue of permission resolutions — see
+ * withPermissionLock.
+ * @type {Map<string, Promise<void>>}
+ */
+const permissionLocks = new Map();
+
+/**
+ * Runs `fn` once every earlier permission resolution for this agent has
+ * finished. "Grant all" sends one GRANT_PERMISSION per row in the same
+ * tick, and the server handles WS messages concurrently, so without this
+ * the row that auto-continues could run between another row's grants.
+ * Reported via a flaky E2E test: a chained Bash grant had saved its
+ * `git init` pattern but not yet its `git add` one when the Write row's
+ * retry spawned the agent's process, so the retry was denied `git add -A`
+ * again.
+ * @template T
+ * @param {string} agentId
+ * @param {() => Promise<T>} fn
+ * @returns {Promise<T>}
+ */
+function withPermissionLock(agentId, fn) {
+  const run = (permissionLocks.get(agentId) ?? Promise.resolve()).then(fn);
+  const tail = run.then(() => {}, () => {});
+  permissionLocks.set(agentId, tail);
+  tail.then(() => { if (permissionLocks.get(agentId) === tail) permissionLocks.delete(agentId); });
+  return run;
+}
+
+/**
  * Broadcasts a JSON payload to all connected WebSocket clients.
  * @param {WebSocketServer} wss
  * @param {object} payload
@@ -1580,28 +1609,37 @@ export function handleConnection(ws, _req, wss) {
         // same card are still unresolved (e.g. the tab closes before the
         // user finishes the card). Only the AUTO-CONTINUE nudge below is
         // deferred until the whole card is resolved.
-        let agent;
-        if (FILE_PATH_TOOLS.includes(event.toolName)) {
-          agent = await grantAgentPath(event.agentId, dirname(event.value));
-        } else {
-          for (const pattern of deriveToolPatterns(event.toolName, event.value)) {
-            agent = await grantAgentToolPattern(event.agentId, pattern);
+        // Saved and applied under the agent's permission lock, so a later
+        // row's auto-continue below only runs once this grant is fully in
+        // place — see withPermissionLock.
+        const granted = await withPermissionLock(event.agentId, async () => {
+          let updated;
+          if (FILE_PATH_TOOLS.includes(event.toolName)) {
+            updated = await grantAgentPath(event.agentId, dirname(event.value));
+          } else {
+            for (const pattern of deriveToolPatterns(event.toolName, event.value)) {
+              updated = await grantAgentToolPattern(event.agentId, pattern);
+            }
           }
-        }
-        if (!agent) break;
+          if (!updated) return null;
 
-        // --add-dir/--allowedTools are CLI startup flags, baked into the
-        // agent's persistent process at spawn time — a running process has
-        // no way to pick up a just-widened grant, so evict it now. The
-        // next turn (the auto-continue below, or any later message)
-        // respawns fresh with the updated flags, resuming via --resume so
-        // no conversation memory is lost. Unconditional (not just when
-        // autoContinue is true) — a still-mid-card grant needs this too,
-        // or a LATER row's own auto-continue would still run against the
-        // stale process.
-        await killAgent(agent.id);
-
-        broadcast(wss, { type: 'AGENT_UPDATED', agent });
+          // --add-dir/--allowedTools are CLI startup flags, baked into the
+          // agent's persistent process at spawn time — a running process
+          // has no way to pick up a just-widened grant, so evict it now.
+          // The next turn (the auto-continue below, or any later message)
+          // respawns fresh with the updated flags, resuming via --resume so
+          // no conversation memory is lost. Unconditional (not just when
+          // autoContinue is true) — a still-mid-card grant needs this too,
+          // or a LATER row's own auto-continue would still run against the
+          // stale process.
+          await killAgent(updated.id);
+          broadcast(wss, { type: 'AGENT_UPDATED', agent: updated });
+          return updated;
+        });
+        if (!granted) break;
+        // Re-read: grants from sibling rows that ran before this one are
+        // in the DB, not necessarily in the object this grant returned.
+        const agent = getAgent(granted.id) ?? granted;
 
         // Granting only updates the agent's stored permissions — it doesn't
         // make the already-finished turn retry itself. Auto-continue once
@@ -1633,6 +1671,9 @@ export function handleConnection(ws, _req, wss) {
         // in the card is resolved: only then does this auto-continue the
         // agent's turn, informed of every outcome (see buildContinueMessage).
         if (!event.autoContinue || !event.chatId) break;
+        // A sibling row's grant may still be being applied; the retry has
+        // to run after it — see withPermissionLock.
+        await withPermissionLock(event.agentId, async () => {});
         const agent = getAgent(event.agentId);
         const chat = getChat(event.chatId);
         if (!agent || !chat) break;
