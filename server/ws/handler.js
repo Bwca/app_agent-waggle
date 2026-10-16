@@ -1498,6 +1498,16 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, exc
       const clearedLimit = await setAgentSessionLimitReset(agent.id, null);
       if (clearedLimit) broadcast(wss, { type: 'AGENT_UPDATED', agent: clearedLimit });
 
+      // A "/compact" turn produces no text at all, only the compaction
+      // itself. Its 🗜️ note (postCompactionNotes) says what happened, so
+      // saving the empty reply too just left a blank bubble beside it.
+      if (!fullText && !stopped && !contextCleared && compactions?.length) {
+        broadcast(wss, { type: 'AGENT_STREAM_DISCARD', streamId, chatId: chat.id, agentId: agent.id });
+        await postCompactionNotes(chat, agent, compactions, wss);
+        log.info({ agentId: agent.id, chatId: chat.id, streamId, durationMs }, 'turn ended with only a compaction');
+        return;
+      }
+
       /** @type {import('../store/db.js').Message} */
       const agentMessage = {
         id: uuidv4(),
