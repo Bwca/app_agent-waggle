@@ -408,7 +408,8 @@ function summarizeAttachment(att) {
 /**
  * How an agent is named wherever it has to be told apart from another
  * agent with the same name: its name plus its id. Shared by message labels
- * (authorLabel) and the roster (formatRoster), so both read alike.
+ * (authorLabel), the roster (formatRoster) and the roster-change notes
+ * (postAgentAddedNote/postAgentRemovedNote), so all of them read alike.
  * @param {{ name: string, id: string }} agent
  * @returns {string}
  */
@@ -1220,7 +1221,9 @@ export async function postAgentRemovedNote(chat, agent, actor, wss) {
     role: 'agent',
     agentId: agent.id,
     authorName: 'System',
-    content: `🚪 ${actorLabel} removed ${agent.name} from the chat`,
+    // With the id, since names aren't unique: two agents called Ada would
+    // otherwise leave identical notes.
+    content: `🚪 ${actorLabel} removed ${agentRef(agent)} from the chat`,
     attachments: [],
     toolCalls: [],
     isSystemNote: true,
@@ -1256,7 +1259,8 @@ export async function postAgentAddedNote(chat, agent, actor, wss) {
     role: 'agent',
     agentId: agent.id,
     authorName: 'System',
-    content: `➕ ${actorLabel} added ${agent.name} to the chat`,
+    // With the id — see postAgentRemovedNote.
+    content: `➕ ${actorLabel} added ${agentRef(agent)} to the chat`,
     attachments: [],
     toolCalls: [],
     isSystemNote: true,
