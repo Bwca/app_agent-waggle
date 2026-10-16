@@ -102,6 +102,48 @@ const OBSERVER_HISTORY_LIMIT = 1000;
 const FREE_RELAY_MAX_ROUNDS = 20;
 
 /**
+ * @typedef {Object} PendingTurn
+ * @property {{ message: NewUserMessage, excludeMessageId: string }} trigger -
+ *   What the turn will answer; replaced by each trigger folded into it.
+ * @property {string[]} foldedMessageIds - Every earlier trigger, which the
+ *   turn still has to show the agent.
+ * @property {Promise<import('../store/db.js').Message | null>} reply
+ */
+
+/**
+ * Turns queued for a busy agent but not yet started, at most one per agent
+ * per chat (keyed `${chatId}:${agentId}`). A new trigger for that agent
+ * joins the waiting turn instead of queueing another — see
+ * runAgentsParallel's `coalesce` option.
+ * @type {Map<string, PendingTurn>}
+ */
+const pendingTurns = new Map();
+
+/**
+ * Reply messages a chain has already relayed, so a reply shared by several
+ * chains (see pendingTurns) relays once, not once per chain. Those chains
+ * usually reach the relay together, and the second relay folds into the
+ * teammate's still-waiting turn anyway; this covers the case where the
+ * teammate's turn has already started by then.
+ * Bounded: only recent replies can still be in flight.
+ * @type {Set<string>}
+ */
+const relayScannedMessageIds = new Set();
+const RELAY_SCANNED_LIMIT = 1000;
+
+/**
+ * Marks replies as relayed — see relayScannedMessageIds.
+ * @param {Iterable<string>} messageIds
+ * @returns {void}
+ */
+function markRelayed(messageIds) {
+  for (const id of messageIds) relayScannedMessageIds.add(id);
+  while (relayScannedMessageIds.size > RELAY_SCANNED_LIMIT) {
+    relayScannedMessageIds.delete(relayScannedMessageIds.values().next().value);
+  }
+}
+
+/**
  * @typedef {Object} UserMessageEvent
  * @property {'USER_MESSAGE'} type
  * @property {string} chatId
@@ -528,9 +570,13 @@ function buildSystemPreamble(agent, chat, members) {
  *   was derived from, if it's already been persisted. Filtered out of
  *   priorMessages regardless of fetch timing, so it's never sent once as
  *   catch-up context AND again as this turn's own final content block.
+ * @param {string[]} [alsoCatchUpIds] - Messages in priorMessages that go
+ *   into catch-up whatever its boundary says: the earlier triggers of a
+ *   turn others were folded into (see pendingTurns), which the agent has
+ *   to see even when it has no recorded seenUntil yet.
  * @returns {import('../services/agentRunner.js').ContentBlock[]}
  */
-export function buildPromptBlocks(agent, chat, members, newMessage, priorMessages, excludeMessageId) {
+export function buildPromptBlocks(agent, chat, members, newMessage, priorMessages, excludeMessageId, alsoCatchUpIds = []) {
   // isLocalCommandOnly/isSystemNote messages don't count — see
   // catchUpMessagesFor's docs on why they can't be trusted as evidence the
   // model ever saw anything sent alongside them, preamble included.
@@ -548,7 +594,10 @@ export function buildPromptBlocks(agent, chat, members, newMessage, priorMessage
   const filteredPriorMessages = excludeMessageId
     ? priorMessages.filter((m) => m.id !== excludeMessageId)
     : priorMessages;
-  const catchUp = catchUpMessagesFor(agent, filteredPriorMessages);
+  const caughtUp = catchUpMessagesFor(agent, filteredPriorMessages);
+  const catchUp = alsoCatchUpIds.length
+    ? filteredPriorMessages.filter((m) => caughtUp.includes(m) || alsoCatchUpIds.includes(m.id))
+    : caughtUp;
   const sectionLabel = hasSpokenInChat ? 'Since you last responded' : 'Conversation context';
   const contextSection = catchUp.length
     ? `[${sectionLabel}]\n${catchUp.map(renderHistoryLine).join('\n')}\n---`
@@ -649,7 +698,7 @@ export async function handleUserMessage(event, wss) {
   /** @type {NewUserMessage} */
   const newMessage = skillInvocation ? { content: skillInvocation.command, attachments } : originalMessage;
 
-  const respondedMessages = await runAgentsParallel(responders, members, chat, newMessage, wss, userMessage.id);
+  const respondedMessages = await runAgentsParallel(responders, members, chat, newMessage, wss, userMessage.id, { coalesce: !skillInvocation });
   const allReplies = [...respondedMessages.values()];
 
   // Relay: parse each round's just-saved agent responses for @mentions of
@@ -702,6 +751,9 @@ export async function handleUserMessage(event, wss) {
     // relay trigger.
     const relayTargets = new Map(); // targetAgentId -> { agent, message } — first mention wins per round, so a target relays once per round even if multiple messages that round mention it
     for (const msg of roundMessages.values()) {
+      // A reply that answered several chains' folded turns is in each of
+      // their rounds; only the first chain to actually relay it does.
+      if (relayScannedMessageIds.has(msg.id)) continue;
       for (const target of extractMentionedAgents(msg.content, currentMembers)) {
         if (target.id === msg.agentId) continue; // an agent mentioning itself doesn't relay to itself
         if (!currentChat.freeRelay && respondedMessages.has(target.id)) continue; // bounded mode: never relay back to an original responder
@@ -715,6 +767,10 @@ export async function handleUserMessage(event, wss) {
       log.warn({ chatId: currentChat.id, rounds: round }, 'free relay hit its safety ceiling, stopping the chain');
       break;
     }
+    // Only now, once this chain is definitely relaying: a chain that scans
+    // a shared reply and then stops (bounded mode's one round) mustn't
+    // take it away from one that would have relayed it.
+    markRelayed(new Set([...relayTargets.values()].map(({ message }) => message.id)));
 
     // Grouped by triggering message so agents relayed by the same mention
     // still run together in one runAgentsParallel call; different mentions
@@ -734,7 +790,8 @@ export async function handleUserMessage(event, wss) {
           currentChat,
           { content: message.content, attachments: message.attachments },
           wss,
-          message.id
+          message.id,
+          { coalesce: true }
         )
       )
     );
@@ -1175,12 +1232,42 @@ async function maybeScheduleAutoContinue(chat, agent, resetAt, wss) {
  * @param {WebSocketServer} wss
  * @param {string} [excludeMessageId] - Forwarded to buildPromptBlocks — see
  *   its docs.
+ * @param {{ coalesce?: boolean }} [options] - `coalesce`: if the agent
+ *   already has a turn waiting in this chat, join it rather than queue
+ *   another, and share its reply. Only for a trigger that's a saved chat
+ *   message (excludeMessageId), sent as-is: a skill invocation or a
+ *   permission continuation has to reach the agent exactly as given.
  * @returns {Promise<Map<string, import('../store/db.js').Message>>}
  */
-async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, excludeMessageId) {
+async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, excludeMessageId, { coalesce = false } = {}) {
   const responded = new Map();
+  const canCoalesce = coalesce && Boolean(excludeMessageId);
 
   await Promise.allSettled(agents.map(async (agent) => {
+    const pendingKey = `${chat.id}:${agent.id}`;
+    const waiting = canCoalesce ? pendingTurns.get(pendingKey) : undefined;
+    if (waiting) {
+      // The waiting turn hasn't built its prompt yet, so it will answer
+      // this message, with the one it was waiting on shown as catch-up.
+      // Reported live: an agent in a nine-minute turn had six more turns
+      // queue up behind it and answered each one separately.
+      waiting.foldedMessageIds.push(waiting.trigger.excludeMessageId);
+      waiting.trigger = { message: userMessage, excludeMessageId };
+      log.info({ agentId: agent.id, chatId: chat.id }, 'turn folded into one already waiting');
+      const reply = await waiting.reply;
+      if (reply) responded.set(agent.id, reply);
+      return;
+    }
+    /** @type {(reply: import('../store/db.js').Message | null) => void} */
+    let settleReply = () => {};
+    /** @type {PendingTurn} */
+    const pending = {
+      trigger: { message: userMessage, excludeMessageId },
+      foldedMessageIds: [],
+      reply: new Promise((resolve) => { settleReply = resolve; }),
+    };
+    if (canCoalesce) pendingTurns.set(pendingKey, pending);
+
     const streamId = uuidv4();
     /** @type {string | null} */
     let promptBuiltAt = null;
@@ -1193,6 +1280,8 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, exc
     // Everything is read fresh here for the same reason (an earlier queued
     // turn may have set resumeId, or the roster may have changed).
     const buildContent = () => {
+      // Started: anything for this agent from now on queues behind it.
+      if (pendingTurns.get(pendingKey) === pending) pendingTurns.delete(pendingKey);
       const freshAgent = getAgent(agent.id) ?? agent;
       const freshChat = getChat(chat.id) ?? chat;
       const freshMembers = freshChat.memberAgentIds.map((id) => getAgent(id)).filter(Boolean);
@@ -1203,7 +1292,8 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, exc
       // (same reasoning catchUpMessagesFor's own docs give).
       const priorMessages = getMessages(chat.id, freshAgent.isObserver ? OBSERVER_HISTORY_LIMIT : 20);
       promptBuiltAt = new Date().toISOString();
-      const content = buildPromptBlocks(freshAgent, freshChat, freshMembers, userMessage, priorMessages, excludeMessageId);
+      const { message, excludeMessageId: triggerId } = pending.trigger;
+      const content = buildPromptBlocks(freshAgent, freshChat, freshMembers, message, priorMessages, triggerId, pending.foldedMessageIds);
       logTranscript({ chatId: chat.id, agentId: agent.id, agentName: agent.name, streamId, direction: 'SENT', content });
       return content;
     };
@@ -1343,7 +1433,10 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, exc
       // A context-clear note is informational, not a real reply — never
       // relay-worthy, same reasoning postCompactionNotes gives for not
       // touching `responded` either.
-      if (!contextCleared) responded.set(agent.id, agentMessage);
+      if (!contextCleared) {
+        responded.set(agent.id, agentMessage);
+        settleReply(agentMessage);
+      }
 
       const dedupedDenials = dedupePermissionDenials(permissionDenials);
       /** @type {AgentStreamEndEvent} */
@@ -1438,6 +1531,10 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, exc
       await maybeScheduleAutoContinue(chat, agent, resetAt, wss);
     } finally {
       activeStreams.delete(streamId);
+      // A turn that never started (e.g. its workingDir is gone) leaves
+      // nothing for later triggers to join.
+      if (pendingTurns.get(pendingKey) === pending) pendingTurns.delete(pendingKey);
+      settleReply(null);
     }
   }));
 
