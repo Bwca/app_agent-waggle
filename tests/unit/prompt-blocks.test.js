@@ -219,4 +219,49 @@ describe('buildPromptBlocks', () => {
     assert.equal(blocks.length, 1, `expected just the new message, no preamble, got: ${JSON.stringify(blocks)}`);
     assert.equal(blocks[0].text, 'hello there');
   });
+
+  test('the new message is labelled with its author, so a user question and a relayed teammate reply read differently', () => {
+    // Reported live: an agent whose previous turn was a relay from a
+    // teammate got the user's next question just as unlabelled, took it as
+    // the teammate's, and answered the teammate instead of the user.
+    const agent = { id: 'claudia', name: 'Claudia', workingDir: '/tmp/claudia', resumeId: 'sess-1' };
+    const priorMessages = [{ id: 'm0', agentId: 'claudia', authorName: 'Claudia', content: 'earlier reply', attachments: [] }];
+    const fromUser = buildPromptBlocks(agent, chat, members, { ...newMessage, from: { role: 'user', agentId: null, authorName: 'You' } }, priorMessages);
+    const fromTeammate = buildPromptBlocks(agent, chat, members, { ...newMessage, from: { role: 'agent', agentId: 'clarence', authorName: 'Clarence' } }, priorMessages);
+    assert.equal(fromUser.at(-1).text, 'You [user]: hello there');
+    assert.equal(fromTeammate.at(-1).text, 'Clarence [agent clarence]: hello there');
+  });
+
+  test('two agents with the same name are told apart by id, and the user by role, in catch-up too', () => {
+    // Names aren't unique: two agents can share one, and the user's display
+    // name can be anything, a teammate's name included.
+    const agent = { id: 'claudia', name: 'Claudia', workingDir: '/tmp/claudia', resumeId: 'sess-1' };
+    const priorMessages = [
+      { id: 'm0', role: 'agent', agentId: 'claudia', authorName: 'Claudia', content: 'earlier reply', attachments: [] },
+      { id: 'm1', role: 'agent', agentId: 'sam-1', authorName: 'Sam', content: 'first Sam', attachments: [] },
+      { id: 'm2', role: 'agent', agentId: 'sam-2', authorName: 'Sam', content: 'second Sam', attachments: [] },
+      { id: 'm3', role: 'user', agentId: null, authorName: 'Sam', content: 'the user, also called Sam', attachments: [] },
+    ];
+    const catchUp = buildPromptBlocks(agent, chat, members, newMessage, priorMessages)[0].text;
+    assert.match(catchUp, /^Sam \[agent sam-1\]: first Sam$/m);
+    assert.match(catchUp, /^Sam \[agent sam-2\]: second Sam$/m);
+    assert.match(catchUp, /^Sam \[user\]: the user, also called Sam$/m);
+  });
+
+  test('the roster gives every agent\'s id, the agent\'s own included', () => {
+    const agent = { id: 'claudia', name: 'Claudia', workingDir: '/tmp/claudia' };
+    const multiMembers = [...members, { id: 'clarence', name: 'Clarence', workingDir: '/tmp/clarence' }];
+    const preamble = buildPromptBlocks(agent, chat, multiMembers, newMessage, [])[0].text;
+    assert.match(preamble, /Claudia \[agent claudia\] — this is you/);
+    assert.match(preamble, /Clarence \[agent clarence\]/);
+  });
+
+  test('a message with no author (a skill command, a permission continuation) is sent exactly as given', () => {
+    // A skill command has to reach the CLI starting with "/", or the CLI
+    // won't recognize it as one.
+    const agent = { id: 'claudia', name: 'Claudia', workingDir: '/tmp/claudia', resumeId: 'sess-1' };
+    const priorMessages = [{ id: 'm0', agentId: 'claudia', authorName: 'Claudia', content: 'earlier reply', attachments: [] }];
+    const blocks = buildPromptBlocks(agent, chat, members, { content: '/review src', attachments: [] }, priorMessages);
+    assert.equal(blocks.at(-1).text, '/review src');
+  });
 });

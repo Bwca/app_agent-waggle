@@ -155,6 +155,12 @@ function markRelayed(messageIds) {
  * @typedef {Object} NewUserMessage
  * @property {string} content
  * @property {import('../store/db.js').Attachment[]} attachments
+ * @property {Pick<import('../store/db.js').Message, 'role' | 'agentId' | 'authorName'>} [from] -
+ *   Who posted it, when it's a saved chat message (the user, or a teammate
+ *   whose reply is being relayed). Shown to the agent ahead of the content,
+ *   via authorLabel — see buildPromptBlocks. Left unset
+ *   for content that must reach the CLI exactly as given (a skill command)
+ *   or that no one in the chat wrote (a permission continuation).
  */
 
 /**
@@ -397,13 +403,39 @@ function summarizeAttachment(att) {
 }
 
 /**
+ * How an agent is named wherever it has to be told apart from another
+ * agent with the same name: its name plus its id. Shared by message labels
+ * (authorLabel) and the roster (formatRoster), so both read alike.
+ * @param {{ name: string, id: string }} agent
+ * @returns {string}
+ */
+function agentRef(agent) {
+  return `${agent.name} [agent ${agent.id}]`;
+}
+
+/**
+ * How a message's author is named to an agent, in catch-up lines and in a
+ * turn's own triggering message alike. A name alone isn't enough: two
+ * agents can share one, and the user's display name can be anything, a
+ * teammate's name included. So it says whether the author is the user or an
+ * agent, and which agent by id (the same id the roster gives — see
+ * formatRoster).
+ * @param {Pick<import('../store/db.js').Message, 'role' | 'agentId' | 'authorName'>} m
+ * @returns {string}
+ */
+function authorLabel(m) {
+  if (m.role === 'user') return `${m.authorName} [user]`;
+  return m.agentId ? agentRef({ name: m.authorName, id: m.agentId }) : m.authorName;
+}
+
+/**
  * Renders one history line, appending attachment placeholders (not full content).
  * @param {import('../store/db.js').Message} m
  * @returns {string}
  */
 function renderHistoryLine(m) {
   const summary = (m.attachments ?? []).map(summarizeAttachment).join(' ');
-  return `${m.authorName}: ${[m.content, summary].filter(Boolean).join(' ')}`;
+  return `${authorLabel(m)}: ${[m.content, summary].filter(Boolean).join(' ')}`;
 }
 
 /**
@@ -491,9 +523,12 @@ export function catchUpMessagesFor(agent, messages) {
  */
 function formatRoster(agent, members) {
   const teammates = members.filter((m) => m.id !== agent.id);
+  // The agent's own line comes first: an agent introduced before ids were
+  // shown never got told its own, and messages label authors by id.
+  const self = `  - ${agentRef(agent)} — this is you`;
   return teammates.length
-    ? teammates.map((m) => `  - ${m.name} (working in ${m.workingDir})`).join('\n')
-    : '  (none — you are the only agent in this chat)';
+    ? [self, ...teammates.map((m) => `  - ${agentRef(m)} (working in ${m.workingDir})`)].join('\n')
+    : `${self}\n  (no teammates — you are the only agent in this chat)`;
 }
 
 /**
@@ -519,10 +554,11 @@ function buildSystemPreamble(agent, chat, members) {
     `are here: for this chat, you are ${agent.name}, an AI assistant operating in the directory:`,
     `${agent.workingDir}`,
     ``,
-    `You are participating in a shared chat called "${chat.name}" with these other AI agents:`,
+    `You are participating in a shared chat called "${chat.name}" with these AI agents:`,
     formatRoster(agent, members),
     ``,
     `How this multi-agent chat works:`,
+    `- Every message is labelled with who wrote it: "Name [user]" for the user, "Name [agent <id>]" for an agent. Go by the label, not the name alone — names aren't guaranteed to be unique.`,
     `- The user routes messages using @mentions. If a message @mentions your name, only you respond.`,
     `- A mention counts wherever it appears in the message — at the start, buried mid-sentence, or the end — not just a leading or trailing line. A teammate's reply that mentions you partway through (e.g. after explaining their reasoning first) is exactly as real a trigger as one at the very top; don't wait for a mention to be the first thing you see before treating it as addressed to you.`,
     `- If no agent is @mentioned, the message went to everyone, and every teammate is already responding to it independently and in parallel — you don't need to @mention a teammate just to make sure they see or answer something they were already sent directly.`,
@@ -668,7 +704,13 @@ export function buildPromptBlocks(agent, chat, members, newMessage, priorMessage
     }
   }
 
-  blocks.push({ type: 'text', text: newMessage.content || '(see attached)' });
+  // Labelled with its author, the same way catch-up lines are. Without it a
+  // user's message and a relayed teammate's reply reach the agent looking
+  // identical. Reported live: an agent whose previous turn was a relay from
+  // a teammate took the user's next question as coming from that teammate,
+  // and addressed its answer to them instead of the user.
+  const text = newMessage.content || '(see attached)';
+  blocks.push({ type: 'text', text: newMessage.from ? `${authorLabel(newMessage.from)}: ${text}` : text });
   return blocks;
 }
 
@@ -723,7 +765,7 @@ export async function handleUserMessage(event, wss) {
   if (responders.length === 0) return { userMessage, replies: [] };
 
   /** @type {NewUserMessage} */
-  const originalMessage = { content, attachments };
+  const originalMessage = { content, attachments, from: userMessage };
   /** @type {NewUserMessage} */
   const newMessage = skillInvocation ? { content: skillInvocation.command, attachments } : originalMessage;
 
@@ -817,7 +859,7 @@ export async function handleUserMessage(event, wss) {
           agents,
           currentMembers,
           currentChat,
-          { content: message.content, attachments: message.attachments },
+          { content: message.content, attachments: message.attachments, from: message },
           wss,
           message.id,
           { coalesce: true }
