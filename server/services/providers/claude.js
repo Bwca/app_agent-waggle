@@ -36,6 +36,14 @@ const CLAUDE_BIN = process.env.CLAUDE_BIN || 'claude';
 export const AUTOCOMPACT_WINDOW = process.env.APP_AUTOCOMPACT || '200k';
 
 /**
+ * The name this app's own MCP server (server/mcp/) is registered under in
+ * the user's Claude config — `clauhort` in the README's setup command.
+ * Overridable via APP_MCP_SERVER_NAME for anyone who registered it under
+ * another name.
+ */
+const CLAUHORT_MCP_SERVER_NAME = process.env.APP_MCP_SERVER_NAME || 'clauhort';
+
+/**
  * Turns a `result` event's `total_cost_usd` into the cost of just that turn.
  * Confirmed against the real CLI: in a persistent stream-json process it's a
  * running total for the whole process (three one-line turns reported
@@ -80,6 +88,18 @@ function buildArgs(agent, { autocompactDefault } = {}) {
     // to re-read a huge history in full. Lossy-but-graceful, unlike dropping
     // resumeId outright (which forgets everything).
     '--autocompact', agent.autocompactOverride || autocompactDefault || AUTOCOMPACT_WINDOW,
+    // Every agent sees the user's own MCP servers, this app's included when
+    // it's registered at user scope, and send_message posts as the user.
+    // Reported live: agents answered through it, so the chat showed the user
+    // saying things they never wrote, and the asAgentId parameter added to
+    // stop that was simply left out by some agents. An agent's normal reply
+    // already reaches the chat, so it loses nothing it needs; every other
+    // Clauhort tool (reading the chat, adding/removing teammates) stays.
+    // Confirmed against the real CLI (2.1.301): this removes the tool under
+    // both acceptEdits and --dangerously-skip-permissions. The "=" form
+    // matters: --disallowedTools takes several values, and a bare next
+    // argument would be swallowed as another tool name.
+    `--disallowedTools=mcp__${CLAUHORT_MCP_SERVER_NAME}__send_message`,
   ];
   if (agent.dangerouslySkipPermissions) {
     args.push('--dangerously-skip-permissions');

@@ -44,6 +44,17 @@ describe('Claude provider', () => {
     assert.equal(windowOf({}), process.env.APP_AUTOCOMPACT || '200k');
   });
 
+  test('every agent is spawned without Clauhort\'s own send_message tool, in either permission mode', () => {
+    // send_message posts as the user, and agents used it to answer, so the
+    // chat showed the user saying things they never wrote. The "=" form
+    // matters: --disallowedTools takes several values and would swallow a
+    // bare next argument.
+    for (const dangerouslySkipPermissions of [false, true]) {
+      const { args } = claudeProvider.spawnCommand({ id: 'a', workingDir: '/work', dangerouslySkipPermissions });
+      assert.ok(args.includes('--disallowedTools=mcp__clauhort__send_message'), JSON.stringify(args));
+    }
+  });
+
   test('writes one stream-json user message per turn', () => {
     const content = [{ type: 'text', text: 'hi' }];
     assert.equal(claudeProvider.encodeTurn(content), '{"type":"user","message":{"role":"user","content":[{"type":"text","text":"hi"}]}}\n');
