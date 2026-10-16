@@ -215,6 +215,7 @@ export default {
   'errors.agentDirNotFound': "Working directory doesn't exist: {path}",
   'errors.agentVerifyFailed': "Couldn't verify Claude can run for this agent: {message}",
   'errors.agentAlreadyInChat': '{name} is already in # {chatName} — remove them from that chat first.',
+  'errors.agentNotInChat': '{name} is not a member of this chat',
   'errors.addMemberFailed': 'Failed to add agent to chat',
   'errors.scheduledContentRequired': 'A scheduled message needs some content or an attachment',
   'errors.scheduledSendAtPast': 'sendAt must be a valid time in the future',

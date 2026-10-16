@@ -408,16 +408,23 @@ export function registerTools(mcpServer, wss) {
   mcpServer.registerTool(
     'send_message',
     {
-      description: 'Post a message into a chat as the user, and wait for and return every agent reply it produces (including any @mention relay chain). A busy agent can take a while to reply — there is no timeout here; if a caller\'s own tool-call timeout gives up first, the reply is still saved and visible via a follow-up get_chat/search_messages call.',
+      description: 'Post a message into a chat, and wait for and return every agent reply it produces (including any @mention relay chain). Posted as the user unless asAgentId is given. If you are yourself an agent in this chat, pass your own agent id as asAgentId (your chat roster lists it), or the message will appear to come from the user; it then goes only to the teammates it @mentions. Your normal reply already reaches the chat, so you rarely need this tool to answer anyone. A busy agent can take a while to reply — there is no timeout here; if a caller\'s own tool-call timeout gives up first, the reply is still saved and visible via a follow-up get_chat/search_messages call.',
       inputSchema: {
         chatId: z.string(),
         content: z.string().min(1),
         attachments: z.array(attachmentSchema).optional(),
+        asAgentId: z.string().optional(),
       },
     },
-    async ({ chatId, content, attachments = [] }) => {
-      if (!getChat(chatId)) return fail(t('errors.chatNotFound'));
-      const { userMessage, replies } = await handleUserMessage({ chatId, content, attachments }, wss);
+    async ({ chatId, content, attachments = [], asAgentId }) => {
+      const chat = getChat(chatId);
+      if (!chat) return fail(t('errors.chatNotFound'));
+      if (asAgentId) {
+        const agent = getAgent(asAgentId);
+        if (!agent) return fail(t('errors.agentNotFound'));
+        if (!chat.memberAgentIds.includes(asAgentId)) return fail(t('errors.agentNotInChat', { name: agent.name }));
+      }
+      const { userMessage, replies } = await handleUserMessage({ chatId, content, attachments, asAgentId }, wss);
       return ok({ userMessage, replies });
     }
   );

@@ -149,6 +149,9 @@ function markRelayed(messageIds) {
  * @property {string} chatId
  * @property {string} content
  * @property {import('../store/db.js').Attachment[]} [attachments]
+ * @property {string} [asAgentId] - Post as this agent (a member of the
+ *   chat) instead of as the user. Only the MCP `send_message` tool sets it,
+ *   for an agent posting into its own chat — see handleUserMessage.
  */
 
 /**
@@ -729,19 +732,28 @@ export function buildPromptBlocks(agent, chat, members, newMessage, priorMessage
  *   forgetting, without needing a WS client of its own.
  */
 export async function handleUserMessage(event, wss) {
-  const { chatId, content, attachments = [] } = event;
+  const { chatId, content, attachments = [], asAgentId } = event;
 
   const chat = getChat(chatId);
   if (!chat) return { userMessage: null, replies: [] };
 
-  // Save user message
+  // An agent posting into its own chat over MCP (asAgentId). Before this,
+  // every send_message call was saved as the user's. Reported live: an
+  // agent answered the user by posting "@Teammate …" through send_message,
+  // so the chat showed the user saying it, and every agent reading the
+  // chat after that took the user's messages as possibly a teammate's.
+  const author = asAgentId && chat.memberAgentIds.includes(asAgentId) ? getAgent(asAgentId) : null;
+  if (asAgentId && !author) return { userMessage: null, replies: [] };
+
+  // Save the message. Named userMessage for the return shape's sake, but
+  // it's the agent's own when `author` is set.
   /** @type {import('../store/db.js').Message} */
   const userMessage = {
     id: uuidv4(),
     chatId,
-    role: 'user',
-    agentId: null,
-    authorName: getUserDisplayName(),
+    role: author ? 'agent' : 'user',
+    agentId: author?.id ?? null,
+    authorName: author?.name ?? getUserDisplayName(),
     content,
     attachments,
     createdAt: new Date().toISOString(),
@@ -760,8 +772,14 @@ export async function handleUserMessage(event, wss) {
   // single-target, and the CLI-facing content is the bare command (stripped
   // of the "@Name " prefix), since the local slash-command parser only
   // recognizes a command when it's the start of the message it sees.
-  const skillInvocation = parseSkillInvocation(content, members);
-  const responders = skillInvocation ? [skillInvocation.agent] : parseResponders(content, members);
+  //
+  // An agent's own post is routed the way its reply would be relayed: only
+  // to the teammates it @mentions, never broadcast, never as a skill
+  // invocation, and never back to itself.
+  const skillInvocation = author ? null : parseSkillInvocation(content, members);
+  const responders = author
+    ? extractMentionedAgents(content, members).filter((a) => a.id !== author.id)
+    : skillInvocation ? [skillInvocation.agent] : parseResponders(content, members);
   if (responders.length === 0) return { userMessage, replies: [] };
 
   /** @type {NewUserMessage} */
@@ -827,6 +845,10 @@ export async function handleUserMessage(event, wss) {
       if (relayScannedMessageIds.has(msg.id)) continue;
       for (const target of extractMentionedAgents(msg.content, currentMembers)) {
         if (target.id === msg.agentId) continue; // an agent mentioning itself doesn't relay to itself
+        // An agent that posted over MCP is mid-turn, waiting for this very
+        // chain to finish; a turn relayed to it would queue behind that
+        // wait and never start.
+        if (author && target.id === author.id) continue;
         if (!currentChat.freeRelay && respondedMessages.has(target.id)) continue; // bounded mode: never relay back to an original responder
         if (relayTargets.has(target.id)) continue;
         relayTargets.set(target.id, { agent: target, message: msg });
