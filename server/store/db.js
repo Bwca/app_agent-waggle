@@ -161,6 +161,12 @@ function transaction(fn) {
  *   agent's own last chat message to know a resumed session can no longer
  *   be trusted to remember turns from before this point, the same way they
  *   already treat an agent with no resumeId at all as having zero memory.
+ * @property {string} [seenUntil] - ISO 8601 instant the prompt of this
+ *   agent's last completed turn in its chat was built: everything posted
+ *   before it has reached the agent. ws/handler.js's catchUpMessagesFor
+ *   catches the agent up from here. Undefined until its first such turn, and
+ *   cleared with resumeId (leaving the chat, or a PATCH to a different
+ *   session), since it describes that session's memory.
  * @property {string} createdAt - ISO 8601 timestamp
  */
 
@@ -278,6 +284,7 @@ CREATE TABLE IF NOT EXISTS agents (
   last_context_tokens INTEGER,
   session_limit_reset_at TEXT,
   context_reset_at TEXT,
+  seen_until TEXT,
   created_at TEXT NOT NULL
 );
 
@@ -516,6 +523,18 @@ function migrateAgentsContextResetAt() {
 }
 
 /**
+ * Adds the `seen_until` column to `agents` if it's missing, same reasoning
+ * as migrateAgentsUsageStats above.
+ * @returns {void}
+ */
+function migrateAgentsSeenUntil() {
+  const columns = db.prepare("PRAGMA table_info(agents)").all().map((col) => col.name);
+  if (!columns.includes('seen_until')) {
+    db.exec('ALTER TABLE agents ADD COLUMN seen_until TEXT');
+  }
+}
+
+/**
  * Adds the `tool_calls` column to `messages` if it's missing — needed for
  * any database created before this column existed, since `CREATE TABLE IF
  * NOT EXISTS` in SCHEMA only applies to brand-new databases. A no-op (one
@@ -677,6 +696,7 @@ function rowToAgent(row) {
   if (row.last_context_tokens != null) agent.lastContextTokens = row.last_context_tokens;
   if (row.session_limit_reset_at) agent.sessionLimitResetAt = row.session_limit_reset_at;
   if (row.context_reset_at) agent.contextResetAt = row.context_reset_at;
+  if (row.seen_until) agent.seenUntil = row.seen_until;
   return agent;
 }
 
@@ -830,6 +850,7 @@ export async function loadDb() {
   migrateAgentsLastTurnCost();
   migrateAgentsSessionLimitReset();
   migrateAgentsContextResetAt();
+  migrateAgentsSeenUntil();
   migrateChatMembersUniqueAgent();
   migrateChatsRosterChangedAt();
   migrateChatsFreeRelay();
@@ -890,7 +911,8 @@ export async function createAgent(data) {
  * @returns {Promise<Agent | null>}
  */
 export async function updateAgent(id, updates) {
-  if (!getAgent(id)) return null;
+  const existing = getAgent(id);
+  if (!existing) return null;
 
   const columns = {
     name: updates.name,
@@ -911,6 +933,8 @@ export async function updateAgent(id, updates) {
     chrome_access: updates.chromeAccess !== undefined ? (updates.chromeAccess ? 1 : 0) : undefined,
     note: updates.note,
     model_override: updates.modelOverride,
+    // A different session doesn't remember what the old one saw.
+    seen_until: updates.resumeId !== undefined && updates.resumeId !== existing.resumeId ? null : undefined,
   };
   const entries = Object.entries(columns).filter(([, v]) => v !== undefined);
   if (entries.length === 0) return getAgent(id);
@@ -956,6 +980,19 @@ export async function recordContextClear(id, resumeId) {
     'UPDATE agents SET resume_id = ?, context_reset_at = ? WHERE id = ?'
   ).run(resumeId, contextResetAt, id);
   return result.changes > 0 ? getAgent(id) : null;
+}
+
+/**
+ * Records when the prompt of an agent's latest completed turn was built —
+ * see Agent.seenUntil. Only ever moves forward: turns finish out of order
+ * when one is stopped or errors, and an older build time would make the
+ * agent catch up on things it has already seen.
+ * @param {string} id
+ * @param {string} seenUntil - ISO 8601
+ * @returns {void}
+ */
+export function setAgentSeenUntil(id, seenUntil) {
+  db.prepare('UPDATE agents SET seen_until = ? WHERE id = ? AND (seen_until IS NULL OR seen_until < ?)').run(seenUntil, id, seenUntil);
 }
 
 /**
@@ -1155,7 +1192,7 @@ export function renameChatCategory(from, to) {
  * @returns {void}
  */
 function clearAgentResumeId(agentId) {
-  db.prepare('UPDATE agents SET resume_id = NULL WHERE id = ?').run(agentId);
+  db.prepare('UPDATE agents SET resume_id = NULL, seen_until = NULL WHERE id = ?').run(agentId);
 }
 
 /**

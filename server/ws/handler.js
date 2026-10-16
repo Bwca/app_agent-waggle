@@ -6,7 +6,7 @@
 import { WebSocket, WebSocketServer } from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 import { dirname } from 'path';
-import { getChat, getAgent, getAgentChatId, getMessages, addMessage, grantAgentPath, grantAgentToolPattern, setAgentResumeIdIfUnset, recordContextClear, setAgentModel, setAgentUsage, setAgentSessionLimitReset, getUserDisplayName, createScheduledMessage, getScheduledMessages } from '../store/db.js';
+import { getChat, getAgent, getAgentChatId, getMessages, addMessage, grantAgentPath, grantAgentToolPattern, setAgentResumeIdIfUnset, recordContextClear, setAgentModel, setAgentSeenUntil, setAgentUsage, setAgentSessionLimitReset, getUserDisplayName, createScheduledMessage, getScheduledMessages } from '../store/db.js';
 import { parseResponders, extractMentionedAgents, parseSkillInvocation } from '../services/messageRouter.js';
 import { runAgentStream, FILE_PATH_TOOLS, deriveToolPatterns, dedupePermissionDenials } from '../services/agentRunner.js';
 import { killAgent, onBackgroundTurn, onBackgroundCompaction, onBackgroundError, onBackgroundUsage, onBackgroundStream, onBackgroundTasksChanged, getAllBackgroundTasks } from '../services/agentProcessManager.js';
@@ -100,16 +100,6 @@ const OBSERVER_HISTORY_LIMIT = 1000;
  * other with nothing new to say.
  */
 const FREE_RELAY_MAX_ROUNDS = 20;
-
-/**
- * When each agent's last completed turn in each chat had its prompt built,
- * keyed `${chatId}:${agentId}` — the boundary catchUpMessagesFor uses for
- * what that agent has already seen (see its seenUntil docs). In memory
- * only: after a restart it's empty, and catch-up falls back to the agent's
- * own last reply, as before this existed.
- * @type {Map<string, string>}
- */
-const seenUntilByAgent = new Map();
 
 /**
  * @typedef {Object} UserMessageEvent
@@ -376,22 +366,22 @@ function renderHistoryLine(m) {
  * spoken again since clearing, that search comes up empty and the full
  * window goes out, same as a never-resumed agent.
  *
- * When `seenUntil` is known — the moment this agent's last completed turn
- * here had its prompt built — it's the boundary instead of the agent's own
- * last reply. The reply is the wrong boundary for a busy agent: anything
+ * When `agent.seenUntil` is known — the moment this agent's last completed
+ * turn here had its prompt built — it's the boundary instead of the agent's
+ * own last reply. The reply is the wrong boundary for a busy agent: anything
  * posted while its turn was running predates that reply but never reached
  * it, and with the prompt now built when a queued turn starts (see
  * runAgentsParallel) that content would otherwise be skipped. A "/clear"
- * after `seenUntil` voids it the same way it voids a reply boundary.
+ * after it voids it the same way it voids a reply boundary.
  *
  * @param {import('../store/db.js').Agent} agent
  * @param {import('../store/db.js').Message[]} messages - Chronological (oldest first)
- * @param {string} [seenUntil] - ISO 8601 instant; see above.
  * @returns {import('../store/db.js').Message[]}
  */
-export function catchUpMessagesFor(agent, messages, seenUntil) {
+export function catchUpMessagesFor(agent, messages) {
   if (!agent.resumeId) return messages;
 
+  const { seenUntil } = agent;
   // `>=`, not `>`: a message saved in the same millisecond the prompt was
   // built may or may not have made it in. Re-sending it costs a line;
   // dropping it loses it.
@@ -538,10 +528,9 @@ function buildSystemPreamble(agent, chat, members) {
  *   was derived from, if it's already been persisted. Filtered out of
  *   priorMessages regardless of fetch timing, so it's never sent once as
  *   catch-up context AND again as this turn's own final content block.
- * @param {string} [seenUntil] - Forwarded to catchUpMessagesFor — see its docs.
  * @returns {import('../services/agentRunner.js').ContentBlock[]}
  */
-export function buildPromptBlocks(agent, chat, members, newMessage, priorMessages, excludeMessageId, seenUntil) {
+export function buildPromptBlocks(agent, chat, members, newMessage, priorMessages, excludeMessageId) {
   // isLocalCommandOnly/isSystemNote messages don't count — see
   // catchUpMessagesFor's docs on why they can't be trusted as evidence the
   // model ever saw anything sent alongside them, preamble included.
@@ -559,7 +548,7 @@ export function buildPromptBlocks(agent, chat, members, newMessage, priorMessage
   const filteredPriorMessages = excludeMessageId
     ? priorMessages.filter((m) => m.id !== excludeMessageId)
     : priorMessages;
-  const catchUp = catchUpMessagesFor(agent, filteredPriorMessages, seenUntil);
+  const catchUp = catchUpMessagesFor(agent, filteredPriorMessages);
   const sectionLabel = hasSpokenInChat ? 'Since you last responded' : 'Conversation context';
   const contextSection = catchUp.length
     ? `[${sectionLabel}]\n${catchUp.map(renderHistoryLine).join('\n')}\n---`
@@ -1193,7 +1182,6 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, exc
 
   await Promise.allSettled(agents.map(async (agent) => {
     const streamId = uuidv4();
-    const seenKey = `${chat.id}:${agent.id}`;
     /** @type {string | null} */
     let promptBuiltAt = null;
     // Built when the turn actually starts, not now. A busy agent's turn
@@ -1215,7 +1203,7 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, exc
       // (same reasoning catchUpMessagesFor's own docs give).
       const priorMessages = getMessages(chat.id, freshAgent.isObserver ? OBSERVER_HISTORY_LIMIT : 20);
       promptBuiltAt = new Date().toISOString();
-      const content = buildPromptBlocks(freshAgent, freshChat, freshMembers, userMessage, priorMessages, excludeMessageId, seenUntilByAgent.get(seenKey));
+      const content = buildPromptBlocks(freshAgent, freshChat, freshMembers, userMessage, priorMessages, excludeMessageId);
       logTranscript({ chatId: chat.id, agentId: agent.id, agentName: agent.name, streamId, direction: 'SENT', content });
       return content;
     };
@@ -1292,7 +1280,7 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, exc
       // may have been cut off before its prompt got anywhere, and a local
       // command never reached the model: catching up from the older
       // boundary re-sends a few lines, where moving it would lose them.
-      if (promptBuiltAt && !stopped && !wasLocalCommand) seenUntilByAgent.set(seenKey, promptBuiltAt);
+      if (promptBuiltAt && !stopped && !wasLocalCommand) setAgentSeenUntil(agent.id, promptBuiltAt);
 
       if (contextCleared && sessionId) {
         // A "/clear" rotated this agent's CLI session to a brand-new
