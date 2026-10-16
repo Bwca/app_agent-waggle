@@ -37,6 +37,7 @@ import {
   searchMessages,
 } from '../store/db.js';
 import { verifyProviderAvailable } from '../services/agentRunner.js';
+import { normalizeAutocompact } from '../public/autocompact.js';
 import { providerForAgent } from '../services/providers/index.js';
 import { spawnForAgent, killAgent } from '../services/agentProcessManager.js';
 import { handleUserMessage, broadcast, postAgentRemovedNote, postAgentAddedNote } from '../ws/handler.js';
@@ -290,9 +291,12 @@ export function registerTools(mcpServer, wss) {
         chromeAccess: z.boolean().optional(),
         note: z.string().optional(),
         modelOverride: z.string().optional(),
+        autocompactOverride: z.string().optional().describe('Context-compaction window: "auto", or 100k–1M tokens (e.g. "200k", "1M"). The Settings default applies when unset.'),
       },
     },
-    async ({ name, color, workingDir, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess, note, modelOverride }) => {
+    async ({ name, color, workingDir, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess, note, modelOverride, autocompactOverride }) => {
+      const normalizedAutocompact = autocompactOverride ? normalizeAutocompact(autocompactOverride) : undefined;
+      if (normalizedAutocompact === null) return fail(t('errors.invalidAutocompact'));
       if (!existsSync(workingDir)) return fail(t('errors.agentDirNotFound', { path: workingDir }));
       const verified = await verifyProviderAvailable();
       if (!verified.ok) return fail(t('errors.agentVerifyFailed', { message: verified.error }));
@@ -303,6 +307,7 @@ export function registerTools(mcpServer, wss) {
       if (chromeAccess) data.chromeAccess = true;
       if (note) data.note = note.trim();
       if (modelOverride) data.modelOverride = modelOverride.trim();
+      if (normalizedAutocompact) data.autocompactOverride = normalizedAutocompact;
       const agent = await createAgent(data);
       broadcast(wss, { type: 'AGENT_CREATED', agent });
       return ok(agent);
@@ -312,7 +317,7 @@ export function registerTools(mcpServer, wss) {
   mcpServer.registerTool(
     'update_agent',
     {
-      description: "Update an agent's mutable fields. Changing workingDir/dangerouslySkipPermissions/resumeId/chromeAccess/modelOverride evicts its live process — the next turn respawns fresh with the new flags.",
+      description: "Update an agent's mutable fields. Changing workingDir/dangerouslySkipPermissions/resumeId/chromeAccess/modelOverride/autocompactOverride evicts its live process — the next turn respawns fresh with the new flags.",
       inputSchema: {
         agentId: z.string(),
         name: z.string().optional(),
@@ -324,9 +329,10 @@ export function registerTools(mcpServer, wss) {
         chromeAccess: z.boolean().optional(),
         note: z.string().optional(),
         modelOverride: z.string().optional().describe('Empty string clears it back to "let the CLI decide"'),
+        autocompactOverride: z.string().optional().describe('Context-compaction window: "auto", or 100k–1M tokens (e.g. "200k", "1M"). Empty string clears it back to the Settings default.'),
       },
     },
-    async ({ agentId, name, color, workingDir, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess, note, modelOverride }) => {
+    async ({ agentId, name, color, workingDir, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess, note, modelOverride, autocompactOverride }) => {
       const existing = getAgent(agentId);
       if (!existing) return fail(t('errors.agentNotFound'));
 
@@ -336,10 +342,15 @@ export function registerTools(mcpServer, wss) {
         if (!verified.ok) return fail(t('errors.agentVerifyFailed', { message: verified.error }));
       }
       const trimmedModelOverride = modelOverride !== undefined ? modelOverride.trim() : undefined;
+      const normalizedAutocompact = autocompactOverride === undefined || autocompactOverride.trim() === ''
+        ? autocompactOverride?.trim()
+        : normalizeAutocompact(autocompactOverride);
+      if (normalizedAutocompact === null) return fail(t('errors.invalidAutocompact'));
       const agent = await updateAgent(agentId, {
         name, color, workingDir, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess,
         note: note !== undefined ? note.trim() : undefined,
         modelOverride: trimmedModelOverride,
+        autocompactOverride: normalizedAutocompact,
       });
       if (!agent) return fail(t('errors.agentNotFound'));
 
@@ -347,7 +358,8 @@ export function registerTools(mcpServer, wss) {
         || (dangerouslySkipPermissions !== undefined && dangerouslySkipPermissions !== existing.dangerouslySkipPermissions)
         || (resumeId !== undefined && resumeId !== existing.resumeId)
         || (chromeAccess !== undefined && chromeAccess !== existing.chromeAccess)
-        || (trimmedModelOverride !== undefined && trimmedModelOverride !== (existing.modelOverride ?? ''));
+        || (trimmedModelOverride !== undefined && trimmedModelOverride !== (existing.modelOverride ?? ''))
+        || (normalizedAutocompact !== undefined && normalizedAutocompact !== (existing.autocompactOverride ?? ''));
       if (flagsChanged) await killAgent(agentId);
       broadcast(wss, { type: 'AGENT_UPDATED', agent });
       return ok(agent);

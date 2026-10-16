@@ -216,6 +216,7 @@ export default {
   'errors.agentVerifyFailed': "Impossible de vérifier que Claude peut fonctionner pour cet agent : {message}",
   'errors.agentAlreadyInChat': "{name} fait déjà partie de # {chatName} — retirez d'abord cet agent de cette discussion.",
   'errors.agentNotInChat': "{name} ne fait pas partie de cette discussion",
+  'errors.invalidAutocompact': 'La fenêtre de compaction doit être « auto », ou entre 100k et 1M jetons (p. ex. 200k, 150000, 1M)',
   'errors.addMemberFailed': "Échec de l'ajout de l'agent à la discussion",
   'errors.scheduledContentRequired': 'Un message programmé doit contenir du texte ou une pièce jointe',
   'errors.scheduledSendAtPast': 'sendAt doit être une heure valide dans le futur',

@@ -15,6 +15,7 @@ import { providerForAgent } from '../services/providers/index.js';
 import { killAgent, getAgentSkills, spawnForAgent } from '../services/agentProcessManager.js';
 import { listAgentCommands, mergeSkills } from '../services/commands.js';
 import { postAgentRemovedNote } from '../ws/handler.js';
+import { normalizeAutocompact } from '../public/autocompact.js';
 import { t } from '../i18n/t.js';
 import { logger } from '../logger.js';
 
@@ -70,11 +71,18 @@ export default function createAgentsRouter(wss) {
    * @param {string} [req.body.modelOverride] - Model to pass as `--model`
    *   (an alias like "opus"/"sonnet"/"fable", or a full model ID) — the CLI
    *   decides on its own when unset.
+   * @param {string} [req.body.autocompactOverride] - This agent's own
+   *   context-compaction window (see normalizeAutocompact); the Settings
+   *   default applies when unset.
    */
   router.post('/', async (req, res) => {
-    const { name, color, workingDir, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess, note, modelOverride } = req.body;
+    const { name, color, workingDir, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess, note, modelOverride, autocompactOverride } = req.body;
     if (!name || !color || !workingDir) {
       return res.status(400).json({ error: t('errors.agentFieldsRequired') });
+    }
+    const normalizedAutocompact = autocompactOverride ? normalizeAutocompact(autocompactOverride) : undefined;
+    if (normalizedAutocompact === null) {
+      return res.status(400).json({ error: t('errors.invalidAutocompact') });
     }
     if (!existsSync(workingDir)) {
       return res.status(400).json({ error: t('errors.agentDirNotFound', { path: workingDir }) });
@@ -90,6 +98,7 @@ export default function createAgentsRouter(wss) {
     if (chromeAccess) data.chromeAccess = true;
     if (note) data.note = note.trim();
     if (modelOverride) data.modelOverride = modelOverride.trim();
+    if (normalizedAutocompact) data.autocompactOverride = normalizedAutocompact;
     const agent = await createAgent(data);
     res.status(201).json(agent);
   });
@@ -122,9 +131,15 @@ export default function createAgentsRouter(wss) {
    *   chromeAccess — confirmed empirically that --model paired with --resume
    *   switches an existing session's model without losing its history, so
    *   this is a genuine live switch, not a fresh conversation.
+   * @param {string} [req.body.autocompactOverride] - IS exposed in the UI
+   *   (the agent menu's compaction-window action), and can change any time
+   *   in the agent's life; an empty string clears it back to the Settings
+   *   default. Baked into spawn args (--autocompact), so a change evicts the
+   *   running process like modelOverride, and the next turn resumes the
+   *   same session with the new window.
    */
   router.patch('/:id', async (req, res) => {
-    const { name, color, workingDir, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess, note, modelOverride } = req.body;
+    const { name, color, workingDir, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess, note, modelOverride, autocompactOverride } = req.body;
     const existing = getAgent(req.params.id);
     if (!existing) return res.status(404).json({ error: t('errors.agentNotFound') });
 
@@ -144,7 +159,14 @@ export default function createAgentsRouter(wss) {
     // comparison — an empty string is a deliberate "clear the override", same
     // convention as note.
     const trimmedModelOverride = modelOverride !== undefined ? modelOverride.trim() : undefined;
-    const agent = await updateAgent(req.params.id, { name, color, workingDir, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess, note: note !== undefined ? note.trim() : undefined, modelOverride: trimmedModelOverride });
+    // '' clears the override, same convention as modelOverride.
+    const normalizedAutocompact = autocompactOverride === undefined || autocompactOverride.trim() === ''
+      ? autocompactOverride?.trim()
+      : normalizeAutocompact(autocompactOverride);
+    if (normalizedAutocompact === null) {
+      return res.status(400).json({ error: t('errors.invalidAutocompact') });
+    }
+    const agent = await updateAgent(req.params.id, { name, color, workingDir, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess, note: note !== undefined ? note.trim() : undefined, modelOverride: trimmedModelOverride, autocompactOverride: normalizedAutocompact });
     if (!agent) return res.status(404).json({ error: t('errors.agentNotFound') });
     // workingDir/dangerouslySkipPermissions/resumeId/chromeAccess/modelOverride
     // are all baked into the agent's persistent process at spawn time
@@ -158,7 +180,8 @@ export default function createAgentsRouter(wss) {
       || (dangerouslySkipPermissions !== undefined && dangerouslySkipPermissions !== existing.dangerouslySkipPermissions)
       || (resumeId !== undefined && resumeId !== existing.resumeId)
       || (chromeAccess !== undefined && chromeAccess !== existing.chromeAccess)
-      || (trimmedModelOverride !== undefined && trimmedModelOverride !== (existing.modelOverride ?? ''));
+      || (trimmedModelOverride !== undefined && trimmedModelOverride !== (existing.modelOverride ?? ''))
+      || (normalizedAutocompact !== undefined && normalizedAutocompact !== (existing.autocompactOverride ?? ''));
     if (flagsChanged) await killAgent(req.params.id);
     res.json(agent);
   });
