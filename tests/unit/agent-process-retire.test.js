@@ -22,6 +22,7 @@ const logDir = mkdtempSync(join(tmpdir(), 'clauhort-retire-'));
 process.env.CLAUDE_BIN = fileURLToPath(new URL('./fixtures/fake-claude.js', import.meta.url));
 process.env.APP_LOG_DIR = logDir;
 process.env.APP_LOG_LEVEL = 'silent';
+process.env.APP_DB_FILE = ':memory:';
 
 /** @type {typeof import('../../server/services/agentProcessManager.js')} */
 let manager;
@@ -31,6 +32,8 @@ const noop = { onChunk: () => {} };
 
 describe('killAgent — a retiring process takes no new turns', () => {
   before(async () => {
+    // Loaded for the user's locale, which turn error messages are worded in.
+    await (await import('../../server/store/db.js')).loadDb();
     manager = await import('../../server/services/agentProcessManager.js');
   });
 
@@ -51,6 +54,21 @@ describe('killAgent — a retiring process takes no new turns', () => {
     const second = await manager.runTurn(moved, text('hi again'), noop);
     assert.notEqual(second.text, first.text, 'the second turn must not run on the process being killed');
     assert.equal(second.sessionId, 'fresh', 'the second turn must not resume the old chat\'s session');
+  });
+
+  test('a turn queued behind one whose process is killed fails instead of hanging, and so does nothing waiting on it', async () => {
+    process.env.FAKE_CLAUDE_REPLY_DELAY_MS = '1000';
+    const agent = { id: 'retire-queued', name: 'Queued', workingDir: tmpdir() };
+    const running = manager.runTurn(agent, text('one'), noop);
+    const queued = manager.runTurn(agent, text('two'), noop);
+    delete process.env.FAKE_CLAUDE_REPLY_DELAY_MS;
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    const graceful = manager.killAgent(agent.id);
+    await manager.killAll();
+    await assert.rejects(running, /exited with code/);
+    await assert.rejects(queued, /exited with code/);
+    await graceful;
   });
 
   test('killing twice returns the same pending exit', async () => {
