@@ -1,7 +1,8 @@
 /**
- * @fileoverview E2E tests: collapsing the bars above the message list (the
- * topbar, search bar, agent-filter bar and page navigation) so the
- * messages get that space back — see COLLAPSIBLE_PARTS in app.js.
+ * @fileoverview E2E tests: collapsing parts of the layout so the messages
+ * get their space back — the bars above the message list (topbar, search
+ * bar, agent-filter bar, page navigation), the chat list, and the agent
+ * panel. See COLLAPSIBLE_PARTS in app.js.
  */
 
 import { test, describe, before, after, beforeEach } from 'node:test';
@@ -9,7 +10,7 @@ import assert from 'node:assert/strict';
 import { startServer, stopServer, resetData } from '../helpers/server.js';
 import { launchBrowser, closeBrowser, openPage, closePage, tid, createChat, reloadAndWaitForConnection } from '../helpers/browser.js';
 
-describe('Collapsible chat header', () => {
+describe('Collapsible panels', () => {
   /** @type {import('puppeteer').Page} */
   let page;
 
@@ -28,7 +29,9 @@ describe('Collapsible chat header', () => {
     if (page) await closePage();
     page = await openPage();
     // localStorage outlives a page, so start every test expanded.
-    await page.evaluate(() => localStorage.removeItem('chatHeaderCollapsed'));
+    await page.evaluate(() => {
+      for (const key of ['chatHeaderCollapsed', 'sidebarCollapsed', 'agentPanelCollapsed']) localStorage.removeItem(key);
+    });
     await reloadAndWaitForConnection(page);
     await createChat(page, 'Header Test');
   });
@@ -69,4 +72,36 @@ describe('Collapsible chat header', () => {
     assert.equal(await marked(), false);
   });
 
+  test('the chat list and the agent panel collapse to edge strips, give their width to the chat, and come back', async () => {
+    const chatWidth = () => page.$eval('#chat-area', (el) => el.getBoundingClientRect().width);
+    const before = await chatWidth();
+    await page.click(tid('sidebar-collapse-btn'));
+    await page.click(tid('agent-panel-collapse-btn'));
+
+    assert.equal(await isShown('chat-list'), false);
+    assert.equal(await isShown('agent-list') || await isShown('no-chat-notice') || await isShown('new-agent-btn'), false);
+    assert.equal(await isShown('sidebar-expand-btn'), true);
+    assert.equal(await isShown('agent-panel-expand-btn'), true);
+    assert.ok(await chatWidth() > before + 300, 'the chat should take the width both panels gave up');
+
+    await reloadAndWaitForConnection(page);
+    assert.equal(await isShown('chat-list'), false, 'stays collapsed across a reload');
+
+    await page.click(tid('sidebar-expand-btn'));
+    await page.click(tid('agent-panel-expand-btn'));
+    assert.equal(await isShown('chat-list'), true);
+    assert.equal(await isShown('new-agent-btn'), true);
+    assert.equal(await isShown('sidebar-expand-btn'), false);
+  });
+
+  test('on a narrow window the panels stay drawers, whatever was collapsed on a wide one', async () => {
+    await page.click(tid('sidebar-collapse-btn'));
+    await page.setViewport({ width: 600, height: 800 });
+    try {
+      assert.equal(await isShown('sidebar-expand-btn'), false, 'no edge strip: the ☰ drawer toggle covers it');
+      assert.equal(await isShown('sidebar-toggle-btn'), true);
+    } finally {
+      await page.setViewport({ width: 1280, height: 800 });
+    }
+  });
 });
