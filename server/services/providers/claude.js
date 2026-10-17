@@ -43,6 +43,10 @@ export const AUTOCOMPACT_WINDOW = process.env.APP_AUTOCOMPACT || '200k';
  */
 const CLAUHORT_MCP_SERVER_NAME = process.env.APP_MCP_SERVER_NAME || 'clauhort';
 
+/** Stream status while the CLI compacts an agent's context, and once it's done. */
+const COMPACTING_STATUS = '🗜️ Compacting context…';
+const COMPACTED_STATUS = '🗜️ Context compacted, continuing…';
+
 /**
  * Turns a `result` event's `total_cost_usd` into the cost of just that turn.
  * Confirmed against the real CLI: in a persistent stream-json process it's a
@@ -355,6 +359,15 @@ export function createTurnAccumulator({ onChunk, onStatus } = {}) {
         // chat instead of it silently passing.
         const compaction = parseCompaction(event);
         if (compaction) turn.compactions.push(compaction);
+      } else if (event.type === 'system' && event.subtype === 'status' && (event.status === 'compacting' || event.compact_result)) {
+        // Compaction can take minutes on a large context, and its
+        // compact_boundary (above) only arrives once it's done, so until
+        // then the turn looked stuck. Reported live: an agent sat silent for
+        // two and a half minutes while its context compacted at the start of
+        // a turn. Confirmed against the real CLI (2.1.301): a
+        // {"subtype":"status","status":"compacting"} event marks the start,
+        // and one with status null and a compact_result marks the end.
+        onStatus?.(event.status === 'compacting' ? COMPACTING_STATUS : COMPACTED_STATUS);
       } else if (event.type === 'conversation_reset' || (event.type === 'system' && event.subtype === 'conversation_reset')) {
         // Since at least CLI 2.1.301 this is a top-level
         // {"type":"conversation_reset"}, no longer a system subtype —
