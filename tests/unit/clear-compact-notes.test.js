@@ -69,7 +69,13 @@ describe('local commands leave a named system note, never a blank reply', () => 
 
   test('"/compact" posts only its compaction note naming the agent, no blank reply', async () => {
     const { chat, agent } = await setUpChat('compact');
-    await handler.handleUserMessage({ chatId: chat.id, content: '@Ada /compact' }, wss);
+    const sent = [];
+    const client = { readyState: 1, send: (data) => sent.push(JSON.parse(data)) };
+    await handler.handleUserMessage({ chatId: chat.id, content: '@Ada /compact' }, { clients: [client] });
+
+    // The browser hears about the compaction while it runs, not only after.
+    const statuses = sent.filter((e) => e.type === 'AGENT_STREAM_STATUS').map((e) => e.status);
+    assert.deepEqual(statuses, ['🗜️ Compacting context…', '🗜️ Context compacted, continuing…']);
 
     const messages = adaMessages(chat.id, agent.id);
     assert.equal(messages.length, 1, `expected just the compaction note, got: ${JSON.stringify(messages.map((m) => m.content))}`);

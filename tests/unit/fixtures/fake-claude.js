@@ -52,6 +52,8 @@ process.stdin.on('data', (chunk) => {
       continue;
     }
     if (text === '/compact') {
+      emit({ type: 'system', subtype: 'status', status: 'compacting' });
+      emit({ type: 'system', subtype: 'status', status: null, compact_result: 'success' });
       emit({ type: 'system', subtype: 'init' });
       emit({ type: 'system', subtype: 'compact_boundary', compact_metadata: { trigger: 'manual', pre_tokens: 19249, post_tokens: 1840 } });
       emit({ type: 'result', is_error: false, result: '', num_turns: 0 });

@@ -61,6 +61,27 @@ describe('createTurnAccumulator — result event error detection', () => {
   });
 });
 
+describe('createTurnAccumulator — compaction in progress', () => {
+  // Confirmed live against CLI 2.1.301: a {"subtype":"status","status":
+  // "compacting"} event marks the start of a compaction and one with status
+  // null and a compact_result marks the end. The compact_boundary only
+  // arrives once it's done, so without these the turn looked stuck.
+  test('reports compaction starting and finishing as stream statuses', () => {
+    const statuses = [];
+    const turn = createTurnAccumulator({ onStatus: (s) => statuses.push(s) });
+    turn.handleEvent({ type: 'system', subtype: 'status', status: 'compacting' });
+    turn.handleEvent({ type: 'system', subtype: 'status', status: null, compact_result: 'success' });
+    assert.deepEqual(statuses, ['🗜️ Compacting context…', '🗜️ Context compacted, continuing…']);
+  });
+
+  test('ignores status events that aren\'t about compaction', () => {
+    const statuses = [];
+    const turn = createTurnAccumulator({ onStatus: (s) => statuses.push(s) });
+    turn.handleEvent({ type: 'system', subtype: 'status', status: null });
+    assert.deepEqual(statuses, []);
+  });
+});
+
 describe('createTurnAccumulator — "/clear" (conversation_reset) handling', () => {
   // Confirmed live against the real CLI (v2.1.260) via a raw two-turn
   // --print --input-format=stream-json --output-format=stream-json run: a
