@@ -592,6 +592,10 @@ const staleAutoContinueBanner = $('#stale-auto-continue-banner');
 const pageNav          = $('#page-nav');
 const chatHeaderCollapseBtn = $('#chat-header-collapse-btn');
 const chatHeaderExpandBtn = $('#chat-header-expand-btn');
+const sidebarCollapseBtn = $('#sidebar-collapse-btn');
+const sidebarExpandBtn = $('#sidebar-expand-btn');
+const agentPanelCollapseBtn = $('#agent-panel-collapse-btn');
+const agentPanelExpandBtn = $('#agent-panel-expand-btn');
 const pageFirstBtn     = $('#page-first-btn');
 const pagePrevBtn      = $('#page-prev-btn');
 const pageIndicator    = $('#page-indicator');
@@ -2173,10 +2177,15 @@ function renderPageNav() {
  *     room, weren't needed most of the time, and crowded the messages out.
  *     Banners asking for action (jumped-to-context, stale auto-continue)
  *     stay visible.
- * @type {Record<'chatHeader', string>}
+ *   - sidebar, agentPanel: the chat list and the agent panel, on layouts
+ *     wide enough to show them in place (narrower ones already make them
+ *     drawers — see style.css).
+ * @type {Record<'chatHeader' | 'sidebar' | 'agentPanel', string>}
  */
 const COLLAPSIBLE_PARTS = {
   chatHeader: 'chatHeaderCollapsed',
+  sidebar: 'sidebarCollapsed',
+  agentPanel: 'agentPanelCollapsed',
 };
 
 /**
@@ -2877,6 +2886,9 @@ function buildChatItem(chat) {
  * category to rename or delete).
  */
 function renderChatList() {
+  // The strip that restores a collapsed chat list says when a chat has
+  // something unread, since the list itself can't.
+  sidebarExpandBtn.classList.toggle('has-hidden-state', unreadChatIds.size > 0);
   chatList.innerHTML = '';
 
   const groups = new Map();
@@ -3126,6 +3138,9 @@ function closeAllAgentMenus() {
 }
 
 function renderAgentPanel() {
+  // Same for a collapsed agent panel: a dot while an agent has activity
+  // you haven't seen (see unseenOutsideFocusAgentIds).
+  agentPanelExpandBtn.classList.toggle('has-hidden-state', unseenOutsideFocusAgentIds.size > 0);
   const chat = activeChat();
   if (!chat) {
     noChatNotice.hidden = false;
@@ -4935,6 +4950,10 @@ settingsForm.addEventListener('submit', handleSettingsFormSubmit);
 
 chatHeaderCollapseBtn.addEventListener('click', () => setCollapsed('chatHeader', true));
 chatHeaderExpandBtn.addEventListener('click', () => setCollapsed('chatHeader', false));
+sidebarCollapseBtn.addEventListener('click', () => setCollapsed('sidebar', true));
+sidebarExpandBtn.addEventListener('click', () => setCollapsed('sidebar', false));
+agentPanelCollapseBtn.addEventListener('click', () => setCollapsed('agentPanel', true));
+agentPanelExpandBtn.addEventListener('click', () => setCollapsed('agentPanel', false));
 sidebarToggleBtn.addEventListener('click', () => toggleDrawer(sidebarEl));
 agentPanelToggleBtn.addEventListener('click', () => toggleDrawer(agentPanelEl));
 drawerBackdrop.addEventListener('click', closeDrawer);

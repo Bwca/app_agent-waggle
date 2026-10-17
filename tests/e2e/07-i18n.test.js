@@ -39,7 +39,7 @@ describe('i18n', () => {
     const htmlLang = await page.evaluate(() => document.documentElement.lang);
     assert.equal(htmlLang, 'en-CA');
 
-    const headerText = await page.$eval('#agent-panel-header', (el) => el.textContent);
+    const headerText = await page.$eval('#agent-panel-title', (el) => el.textContent);
     assert.equal(headerText, enCA['agentPanel.header']);
 
     const newChatTitle = await page.$eval(tid('new-chat-btn'), (el) => el.title);
@@ -68,7 +68,7 @@ describe('i18n', () => {
     const htmlLang = await page.evaluate(() => document.documentElement.lang);
     assert.equal(htmlLang, 'fr-CA');
 
-    const headerText = await page.$eval('#agent-panel-header', (el) => el.textContent);
+    const headerText = await page.$eval('#agent-panel-title', (el) => el.textContent);
     assert.equal(headerText, frCA['agentPanel.header']);
 
     const newChatTitle = await page.$eval(tid('new-chat-btn'), (el) => el.title);

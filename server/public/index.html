@@ -18,7 +18,7 @@
     // keep these keys in step with it): otherwise every reload flashes them
     // open first.
     try {
-      for (const [part, key] of [['chatHeader', 'chatHeaderCollapsed']]) {
+      for (const [part, key] of [['chatHeader', 'chatHeaderCollapsed'], ['sidebar', 'sidebarCollapsed'], ['agentPanel', 'agentPanelCollapsed']]) {
         if (localStorage.getItem(key) === '1') document.documentElement.dataset[part] = 'collapsed';
       }
     } catch {}
@@ -42,13 +42,17 @@
       </div>
       <div id="chats-section">
         <span class="section-label" data-i18n="sidebar.chatsLabel">Chats</span>
-        <button id="new-chat-btn" data-testid="new-chat-btn" data-i18n-title="sidebar.newChatTitle" title="New chat">+</button>
+        <div id="chats-section-actions">
+          <button id="new-chat-btn" data-testid="new-chat-btn" data-i18n-title="sidebar.newChatTitle" title="New chat">+</button>
+          <button id="sidebar-collapse-btn" data-testid="sidebar-collapse-btn" data-i18n-title="common.collapseChats" title="Hide chats">«</button>
+        </div>
       </div>
       <form id="new-chat-form" hidden>
         <input id="new-chat-input" data-testid="new-chat-input" data-i18n-placeholder="sidebar.chatNamePlaceholder" placeholder="Chat name…" autocomplete="off" />
       </form>
       <div id="chat-list" data-testid="chat-list"></div>
     </aside>
+    <button id="sidebar-expand-btn" class="panel-expand-btn" data-testid="sidebar-expand-btn" data-i18n-title="common.expandChats" title="Show chats">›</button>
 
     <main id="chat-area">
       <div id="empty-state" data-testid="empty-state" data-i18n="chat.emptyState">Select a chat or create one</div>
@@ -111,8 +115,12 @@
       </div>
     </main>
 
+    <button id="agent-panel-expand-btn" class="panel-expand-btn" data-testid="agent-panel-expand-btn" data-i18n-title="common.expandAgents" title="Show agents">‹</button>
     <aside id="agent-panel">
-      <div id="agent-panel-header" data-i18n="agentPanel.header">Agents</div>
+      <div id="agent-panel-header">
+        <span id="agent-panel-title" data-i18n="agentPanel.header">Agents</span>
+        <button id="agent-panel-collapse-btn" data-testid="agent-panel-collapse-btn" data-i18n-title="common.collapseAgents" title="Hide agents">»</button>
+      </div>
       <div id="no-chat-notice" data-testid="no-chat-notice" data-i18n="agentPanel.noChatSelected">No chat selected</div>
       <ul id="agent-list" data-testid="agent-list" hidden></ul>
       <div id="agent-actions" hidden>

@@ -80,6 +80,7 @@ html, body { height: 100%; background: var(--bg0); color: var(--text); font-fami
 
 #new-chat-btn { background: none; border: none; color: var(--dim); font-size: 20px; cursor: pointer; line-height: 1; padding: 0 2px; transition: color .15s; }
 #new-chat-btn:hover { color: var(--text); }
+#chats-section-actions { display: flex; align-items: center; gap: 8px; }
 
 #new-chat-form { padding: 4px 10px 8px; }
 #new-chat-input { width: 100%; background: var(--bg2); border: 1px solid var(--faint); border-radius: 6px; padding: 6px 10px; color: var(--text); font-size: 13px; outline: none; }
@@ -399,7 +400,7 @@ html[data-chat-header="collapsed"] #chat-header-expand-btn { display: block; }
 
 /* ── Agent Panel ───────────────────────────────────────────────────── */
 #agent-panel { width: 240px; min-width: 240px; background: var(--bg1); border-left: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
-#agent-panel-header { padding: 13px 14px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .7px; color: var(--dim); border-bottom: 1px solid var(--border); }
+#agent-panel-header { padding: 13px 14px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .7px; color: var(--dim); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
 #no-chat-notice { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--dim); font-size: 13px; }
 
 #agent-list { list-style: none; padding: 8px; flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
@@ -605,6 +606,30 @@ html[data-chat-header="collapsed"] #chat-header-expand-btn { display: block; }
 #modal-submit { padding: 7px 18px; border-radius: 7px; border: none; background: var(--blue); color: var(--bg0); font-size: 14px; font-weight: 600; cursor: pointer; transition: background .15s, opacity .15s; }
 #modal-submit:disabled { opacity: .5; cursor: not-allowed; }
 #modal-submit:not(:disabled):hover { background: var(--blue-hover); }
+
+/* ── Collapsible side panels ─────────────────────────────────────────
+   Same idea as the collapsible chat header (see COLLAPSIBLE_PARTS in
+   app.js): « / » hide a panel, and a thin strip at that edge brings it
+   back, with a dot when something in it wants attention. Only on layouts
+   wide enough to show the panel in place: below the breakpoints further
+   down, each panel is already an off-canvas drawer. */
+#sidebar-collapse-btn, #agent-panel-collapse-btn { display: none; background: none; border: none; color: var(--dim); font-size: 14px; cursor: pointer; line-height: 1; padding: 0 2px; transition: color .15s; }
+#sidebar-collapse-btn:hover, #agent-panel-collapse-btn:hover { color: var(--text); }
+.panel-expand-btn { display: none; position: relative; flex-shrink: 0; width: 18px; padding: 0; background: var(--bg1); border: none; color: var(--dim); font-size: 13px; cursor: pointer; transition: color .15s, background .15s; }
+.panel-expand-btn:hover { color: var(--text); background: var(--bg2); }
+#sidebar-expand-btn { border-right: 1px solid var(--border); }
+#agent-panel-expand-btn { border-left: 1px solid var(--border); }
+.panel-expand-btn.has-hidden-state::after { content: ''; position: absolute; top: 14px; left: 50%; width: 6px; height: 6px; margin-left: -3px; border-radius: 50%; background: var(--blue); }
+@media (min-width: 641px) {
+  #sidebar-collapse-btn { display: inline-block; }
+  html[data-sidebar="collapsed"] #sidebar { display: none; }
+  html[data-sidebar="collapsed"] #sidebar-expand-btn { display: block; }
+}
+@media (min-width: 901px) {
+  #agent-panel-collapse-btn { display: inline-block; }
+  html[data-agent-panel="collapsed"] #agent-panel { display: none; }
+  html[data-agent-panel="collapsed"] #agent-panel-expand-btn { display: block; }
+}
 
 /* ── Responsive layout ────────────────────────────────────────────────
    #sidebar and #agent-panel are fixed-width flex siblings of #chat-area,

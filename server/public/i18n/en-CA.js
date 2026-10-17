@@ -10,6 +10,10 @@ export default {
   'common.viewLogo': 'View logo',
   'common.toggleChats': 'Toggle chats',
   'common.toggleAgents': 'Toggle agents',
+  'common.collapseChats': "Hide chats",
+  'common.expandChats': "Show chats",
+  'common.collapseAgents': "Hide agents",
+  'common.expandAgents': "Show agents",
 
   'conn.connected': 'Connected',
   'conn.disconnected': 'Disconnected',
