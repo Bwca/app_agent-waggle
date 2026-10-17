@@ -590,6 +590,8 @@ const jumpedBanner     = $('#jumped-banner');
 const jumpedBannerBackBtn = $('#jumped-banner-back-btn');
 const staleAutoContinueBanner = $('#stale-auto-continue-banner');
 const pageNav          = $('#page-nav');
+const chatHeaderCollapseBtn = $('#chat-header-collapse-btn');
+const chatHeaderExpandBtn = $('#chat-header-expand-btn');
 const pageFirstBtn     = $('#page-first-btn');
 const pagePrevBtn      = $('#page-prev-btn');
 const pageIndicator    = $('#page-indicator');
@@ -1954,6 +1956,7 @@ function renderMessageFilterBar() {
   if (messageFilterAgentIds.size === 0) {
     messageFilterBar.hidden = true;
     messageFilterBar.innerHTML = '';
+    updateChatHeaderExpandBtn();
     return;
   }
   const names = [...messageFilterAgentIds].map((id) => agentById(id)?.name).filter(Boolean).join(', ');
@@ -1962,6 +1965,7 @@ function renderMessageFilterBar() {
     <span data-testid="message-filter-bar-label">${escHtml(t('chat.filterBarLabel', { names }))}</span>
     <button id="message-filter-clear-btn" data-testid="message-filter-clear-btn">${escHtml(t('chat.filterBarClearBtn'))}</button>`;
   messageFilterBar.querySelector('#message-filter-clear-btn').addEventListener('click', clearMessageFilter);
+  updateChatHeaderExpandBtn();
 }
 
 // ─── Message search ─────────────────────────────────────────────────────────
@@ -1976,6 +1980,7 @@ function openSearchBar() {
   searchBtn.classList.add('active');
   searchBar.hidden = false;
   searchInput.focus();
+  updateChatHeaderExpandBtn();
 }
 
 /**
@@ -1990,6 +1995,7 @@ function closeSearchBar() {
   searchResultsEl.hidden = true;
   searchResultsEl.innerHTML = '';
   searchInput.value = '';
+  updateChatHeaderExpandBtn();
 }
 
 /**
@@ -2151,6 +2157,51 @@ function renderPageNav() {
   pagePrevBtn.disabled = currentPage === 1;
   pageNextBtn.disabled = currentPage === totalPages;
   pageLastBtn.disabled = currentPage === totalPages;
+  updateChatHeaderExpandBtn();
+}
+
+// ─── Collapsible panels ─────────────────────────────────────────────────────
+
+/**
+ * Parts of the layout that can be collapsed to give their space to the
+ * messages, keyed by the `data-*` attribute set on <html> while collapsed
+ * (style.css hides the part from that), with the localStorage key that
+ * remembers it. The pre-paint script in index.html's <head> lists the same
+ * pairs, so keep the two in step.
+ *   - chatHeader: the bars above the message list — topbar, search bar,
+ *     agent-filter bar, page navigation. Reported live: they took a lot of
+ *     room, weren't needed most of the time, and crowded the messages out.
+ *     Banners asking for action (jumped-to-context, stale auto-continue)
+ *     stay visible.
+ * @type {Record<'chatHeader', string>}
+ */
+const COLLAPSIBLE_PARTS = {
+  chatHeader: 'chatHeaderCollapsed',
+};
+
+/**
+ * Collapses (or restores) one of COLLAPSIBLE_PARTS. Remembered per
+ * browser, like the theme, and applied before first paint by index.html.
+ * @param {keyof typeof COLLAPSIBLE_PARTS} part
+ * @param {boolean} collapsed
+ * @returns {void}
+ */
+function setCollapsed(part, collapsed) {
+  if (collapsed) document.documentElement.dataset[part] = 'collapsed';
+  else delete document.documentElement.dataset[part];
+  try { localStorage.setItem(COLLAPSIBLE_PARTS[part], collapsed ? '1' : '0'); } catch { /* storage unavailable: still applies for this page */ }
+}
+
+/**
+ * Marks the ▾ button that restores a collapsed header whenever one of the
+ * hidden bars is showing something in effect — an open search, an agent
+ * filter, or an older page — so collapsing never hides that the message
+ * list isn't the plain, latest view.
+ * @returns {void}
+ */
+function updateChatHeaderExpandBtn() {
+  const hiddenState = !searchBar.hidden || !messageFilterBar.hidden || (!pageNav.hidden && !isViewingLatestPage());
+  chatHeaderExpandBtn.classList.toggle('has-hidden-state', hiddenState);
 }
 
 /**
@@ -4882,6 +4933,8 @@ settingsCancel.addEventListener('click', closeSettingsModal);
 settingsOverlay.addEventListener('click', (e) => { if (e.target === settingsOverlay) closeSettingsModal(); });
 settingsForm.addEventListener('submit', handleSettingsFormSubmit);
 
+chatHeaderCollapseBtn.addEventListener('click', () => setCollapsed('chatHeader', true));
+chatHeaderExpandBtn.addEventListener('click', () => setCollapsed('chatHeader', false));
 sidebarToggleBtn.addEventListener('click', () => toggleDrawer(sidebarEl));
 agentPanelToggleBtn.addEventListener('click', () => toggleDrawer(agentPanelEl));
 drawerBackdrop.addEventListener('click', closeDrawer);

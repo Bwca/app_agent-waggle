@@ -20,6 +20,8 @@ export default {
 
   'chat.emptyState': 'Select a chat or create one',
   'chat.reconnecting': 'Reconnecting…',
+  'chat.collapseHeaderTitle': "Hide top bars",
+  'chat.expandHeaderTitle': "Show top bars",
   'chat.messagePlaceholder': 'Message… (@ to mention, / for commands)',
   'chat.micBtnTitle': 'Dictate message',
   'chat.micBtnTitleRecording': 'Listening… click to stop',

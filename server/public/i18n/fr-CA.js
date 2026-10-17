@@ -20,6 +20,8 @@ export default {
 
   'chat.emptyState': 'Sélectionnez une discussion ou créez-en une',
   'chat.reconnecting': 'Reconnexion…',
+  'chat.collapseHeaderTitle': "Masquer les barres du haut",
+  'chat.expandHeaderTitle': "Afficher les barres du haut",
   'chat.messagePlaceholder': 'Message… (@ pour mentionner, / pour les commandes)',
   'chat.micBtnTitle': 'Dicter le message',
   'chat.micBtnTitleRecording': 'Écoute en cours… cliquez pour arrêter',

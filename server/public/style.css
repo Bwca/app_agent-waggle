@@ -125,7 +125,22 @@ html, body { height: 100%; background: var(--bg0); color: var(--text); font-fami
 
 #empty-state { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--dim); }
 
-#chat-view { display: flex; flex-direction: column; height: 100%; }
+#chat-view { display: flex; flex-direction: column; height: 100%; position: relative; }
+/* Collapsed chat header (see COLLAPSIBLE_PARTS in app.js): the bars
+   above the message list give their space back to it, and a small ▾ in the
+   corner brings them back. Banners that ask for action stay visible. */
+html[data-chat-header="collapsed"] #chat-topbar,
+html[data-chat-header="collapsed"] #search-bar,
+html[data-chat-header="collapsed"] #message-filter-bar,
+html[data-chat-header="collapsed"] #page-nav { display: none; }
+#chat-header-collapse-btn { background: none; border: none; color: var(--dim); font-size: 14px; cursor: pointer; line-height: 1; padding: 2px; flex-shrink: 0; transition: color .15s; }
+#chat-header-collapse-btn:hover { color: var(--text); }
+#chat-header-expand-btn { display: none; position: absolute; top: 6px; right: 20px; z-index: 5; background: var(--bg1); border: 1px solid var(--border); border-radius: 10px; color: var(--muted); font-size: 12px; line-height: 1; padding: 3px 8px; cursor: pointer; opacity: .85; transition: opacity .15s, color .15s; }
+#chat-header-expand-btn:hover { opacity: 1; color: var(--text); }
+html[data-chat-header="collapsed"] #chat-header-expand-btn { display: block; }
+/* Something hidden is in effect (a search, an agent filter, an older page). */
+#chat-header-expand-btn.has-hidden-state { opacity: 1; color: var(--text); }
+#chat-header-expand-btn.has-hidden-state::after { content: ''; display: inline-block; width: 6px; height: 6px; margin-left: 5px; border-radius: 50%; background: var(--blue); vertical-align: middle; }
 
 #chat-topbar { padding: 13px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-shrink: 0; }
 #chat-topbar-left { display: flex; align-items: center; gap: 10px; min-width: 0; }

@@ -14,6 +14,14 @@
        blocking on purpose — must run before style.css is applied. -->
   <script>
     if (localStorage.getItem('theme') === 'light') document.documentElement.dataset.theme = 'light';
+    // Same reason for collapsed panels (see COLLAPSIBLE_PARTS in app.js —
+    // keep these keys in step with it): otherwise every reload flashes them
+    // open first.
+    try {
+      for (const [part, key] of [['chatHeader', 'chatHeaderCollapsed']]) {
+        if (localStorage.getItem(key) === '1') document.documentElement.dataset[part] = 'collapsed';
+      }
+    } catch {}
   </script>
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -45,6 +53,7 @@
     <main id="chat-area">
       <div id="empty-state" data-testid="empty-state" data-i18n="chat.emptyState">Select a chat or create one</div>
       <div id="chat-view" hidden>
+        <button id="chat-header-expand-btn" data-testid="chat-header-expand-btn" data-i18n-title="chat.expandHeaderTitle" title="Show top bars">▾</button>
         <div id="chat-topbar">
           <div id="chat-topbar-left">
             <button id="sidebar-toggle-btn" data-testid="sidebar-toggle-btn" data-i18n-title="common.toggleChats" title="Toggle chats">☰</button>
@@ -60,6 +69,7 @@
             <button id="auto-continue-btn" data-testid="auto-continue-btn" data-i18n-title="chat.autoContinueOffTitle" title="Auto-continue after session limit: off" aria-pressed="false">⏳</button>
             <button id="search-btn" data-testid="search-btn" data-i18n-title="search.btnTitle" title="Search messages">🔍</button>
             <button id="agent-panel-toggle-btn" data-testid="agent-panel-toggle-btn" data-i18n-title="common.toggleAgents" title="Toggle agents">👥</button>
+            <button id="chat-header-collapse-btn" data-testid="chat-header-collapse-btn" data-i18n-title="chat.collapseHeaderTitle" title="Hide top bars">▴</button>
           </div>
         </div>
         <div id="search-bar" data-testid="search-bar" hidden>
