@@ -915,6 +915,16 @@ function fmtScheduledTime(iso) {
 }
 
 /**
+ * Full date, time and time zone for a tooltip, where fmtScheduledTime's
+ * compact form may be cut off by an ellipsis.
+ * @param {string} iso
+ * @returns {string}
+ */
+function fmtFullTime(iso) {
+  return new Date(iso).toLocaleString(currentLocale, { dateStyle: 'full', timeStyle: 'long' });
+}
+
+/**
  * Converts an ISO timestamp to the local-time value string a
  * datetime-local input (step="1") expects — the inverse of reading
  * `new Date(input.value).getTime()` back out at submit time. Used to
@@ -3173,7 +3183,7 @@ function renderAgentPanel() {
         ${agent.model ? `<span class="agent-model" data-testid="agent-model" title="${t('agent.modelTitle', { model: escHtml(agent.model) })}">🧠 ${escHtml(formatModelLabel(agent.model))}</span>` : ''}
         ${renderUsageBadge(agent)}
         ${renderBackgroundTasksBadge(agent)}
-        ${isSessionLimited(agent) ? `<span class="agent-session-limit" data-testid="agent-session-limit" title="${t('agent.sessionLimitBadgeTitle')}">⏳ ${t('agent.sessionLimitBadgeLabel', { time: fmtScheduledTime(agent.sessionLimitResetAt) })}</span>` : ''}
+        ${isSessionLimited(agent) ? `<span class="agent-session-limit" data-testid="agent-session-limit" title="${escHtml(t('agent.sessionLimitBadgeTitle', { time: fmtFullTime(agent.sessionLimitResetAt) }))}">⏳ ${t('agent.sessionLimitBadgeLabel', { time: fmtScheduledTime(agent.sessionLimitResetAt) })}</span>` : ''}
         ${agent.note ? `<span class="agent-note" data-testid="agent-note" title="${escHtml(agent.note)}">📝 ${escHtml(agent.note)}</span>` : ''}
         ${agent.resumeId ? `<button class="agent-session-btn" data-testid="agent-session-btn" title="${t('agent.copySessionTitle', { resumeId: escHtml(agent.resumeId) })}">⧉ ${agent.resumeId.slice(0, 8)}…</button>` : ''}
       </div>

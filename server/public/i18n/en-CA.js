@@ -165,7 +165,7 @@ export default {
   'agent.backgroundTasksBadgeMany': 'waiting on {count} background tasks',
   'agent.backgroundTasksBadgeTitle': 'Still running in the background — this agent will pick back up on its own once it finishes:\n{list}',
   'agent.sessionLimitBadgeLabel': 'resets {time}',
-  'agent.sessionLimitBadgeTitle': 'This agent hit Claude’s session limit on its last turn. It should be usable again after this time.',
+  'agent.sessionLimitBadgeTitle': 'This agent hit Claude’s session limit on its last turn. It should be usable again after {time}.',
   'agent.addNoteTitle': 'Add a note',
   'agent.editNoteTitle': 'Edit note',
   'agent.notePlaceholder': 'e.g. Refactoring the payments module',

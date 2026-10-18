@@ -165,7 +165,7 @@ export default {
   'agent.backgroundTasksBadgeMany': 'en attente de {count} tâches en arrière-plan',
   'agent.backgroundTasksBadgeTitle': 'Toujours en cours en arrière-plan — cet agent reprendra de lui-même une fois terminé :\n{list}',
   'agent.sessionLimitBadgeLabel': 'réinitialisation {time}',
-  'agent.sessionLimitBadgeTitle': "Cet agent a atteint la limite de session de Claude lors de son dernier tour. Il devrait être de nouveau utilisable après cette heure.",
+  'agent.sessionLimitBadgeTitle': "Cet agent a atteint la limite de session de Claude lors de son dernier tour. Il devrait être de nouveau utilisable après le {time}.",
   'agent.addNoteTitle': 'Ajouter une note',
   'agent.editNoteTitle': 'Modifier la note',
   'agent.notePlaceholder': 'p. ex. Refonte du module de paiement',
