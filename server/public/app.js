@@ -1799,6 +1799,9 @@ function onStreamError({ streamId, error }) {
   entry.body.textContent = t('errors.streamErrorPrefix', { error });
   entry.body.style.color = 'var(--red)';
   entry.el.classList.remove('streaming');
+  // The turn is already over, so a Stop click would wait forever on a
+  // stream the server no longer has.
+  entry.el.querySelector('.msg-stop-btn')?.remove();
 }
 
 // ─── DOM rendering ───────────────────────────────────────────────────────────
