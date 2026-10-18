@@ -432,6 +432,9 @@ describe('Messaging', () => {
     assert.match(errorText, /Claudia/);
     assert.match(errorText, /working directory no longer exists/i);
     assert.ok(errorText.includes(dir), `error should include the missing path, got: "${errorText}"`);
+    // The turn is over, so there's nothing left to stop — a leftover Stop
+    // button would sit on "Stopping…" forever.
+    assert.equal(await page.$(tid('stream-stop-btn')), null, 'errored bubble should drop its Stop button');
   });
 
   test('spotlighting an agent hides your own messages addressed to someone else', async () => {
