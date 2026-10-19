@@ -118,4 +118,54 @@ describe('a busy agent sees each message exactly once', () => {
     }
     delete process.env.FAKE_CLAUDE_REPLY;
   });
+
+  /**
+   * Bea answers "@Ada please look at …" at once, but her chain relays it
+   * only when slow Cid answers too. Ada is asked something directly in
+   * between, so she reads Bea's mention as catch-up before the relay comes.
+   * Each agent's process is spawned here, one at a time, so it keeps the
+   * reply and delay the env had then.
+   */
+  async function setUpLateRelay(name, adaDelayMs) {
+    await manager.killAll();
+    const { chat, dirs: [ada] } = await setUpChat(name, ['Ada', 'Bea', 'Cid']);
+    const send = (content) => handler.handleUserMessage({ chatId: chat.id, content }, wss);
+    const spawn = async (agentName, delayMs, reply) => {
+      process.env.FAKE_CLAUDE_REPLY_DELAY_MS = String(delayMs);
+      process.env.FAKE_CLAUDE_REPLY = reply;
+      await send(`@${agentName} warm up`);
+    };
+    await spawn('Ada', adaDelayMs, 'ok {turn}');
+    await spawn('Cid', 600, 'done {turn}');
+    await spawn('Bea', 0, '@Ada please look at {turn}');
+    process.env.FAKE_CLAUDE_REPLY_DELAY_MS = '400';
+    delete process.env.FAKE_CLAUDE_REPLY;
+    const beaReplied = () => db.getMessages(chat.id, 50).filter((m) => m.agentId === `${name}-Bea`).at(-1);
+    const warmedUp = promptsOf(ada).length;
+    const warmUpReply = beaReplied().id;
+    const chain = send('@Bea @Cid go');
+    await until(() => beaReplied().id !== warmUpReply);
+    return { chat, ada, send, chain, warmedUp, beaReply: beaReplied().content };
+  }
+
+  test('a relay of a mention the agent already read in a finished turn starts no turn', async () => {
+    const { ada, send, chain, warmedUp, beaReply } = await setUpLateRelay('late-done', 0);
+    await send('@Ada hello');
+    assert.equal(timesSeen(promptsOf(ada).slice(warmedUp), beaReply), 1, 'Ada should have read Bea\'s mention as catch-up');
+    await chain;
+
+    assert.equal(promptsOf(ada).length - warmedUp, 1, 'the late relay of a mention Ada already read should not start another turn');
+  });
+
+  test('a relay of a mention the agent is reading in a running turn shares that turn\'s reply', async () => {
+    const { chat, ada, send, chain, warmedUp, beaReply } = await setUpLateRelay('late-running', 1000);
+    const direct = send('@Ada hello');
+    await until(() => promptsOf(ada).length > warmedUp);
+    await Promise.all([direct, chain]);
+
+    const prompts = promptsOf(ada).slice(warmedUp);
+    assert.equal(prompts.length, 1, 'the late relay should join Ada\'s running turn, not queue another');
+    assert.equal(timesSeen(prompts, beaReply), 1);
+    assert.equal(db.getMessages(chat.id, 50).filter((m) => m.agentId === 'late-running-Ada').length - warmedUp, 1, 'Ada should post one reply');
+  });
 });
