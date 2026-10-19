@@ -140,6 +140,31 @@ describe('Messaging', () => {
     assert.equal(streamingGone, null, 'streaming bubble should be removed after stream ends');
   });
 
+  test('typing bar and agent panel show who is still replying, and clear once the reply lands', async () => {
+    await createChat(page, 'Typing Bar Test');
+    await createAgent(page, { name: 'Claudia', workingDir: agentDir('claudia'), addToChat: true });
+
+    await sendMessage(page, '@Claudia reply with exactly: pong');
+
+    await page.waitForFunction(
+      () => [...document.querySelectorAll('[data-testid="typing-chip"]')]
+        .some((el) => el.textContent.includes('Claudia')),
+      { timeout: 60_000 }
+    );
+    const busy = await page.$eval(tid('agent-item'), (el) => el.classList.contains('is-streaming'));
+    assert.ok(busy, 'agent panel row should be marked as streaming');
+    const chatBusy = await page.$eval('.chat-item.active', (el) => el.classList.contains('is-busy'));
+    assert.ok(chatBusy, 'active chat row should be marked as busy');
+
+    await waitForAgentResponse(page, { timeout: 90_000 });
+    await page.waitForFunction(
+      () => document.querySelector('[data-testid="typing-bar"]')?.hidden
+        && !document.querySelector('[data-testid="agent-item"]')?.classList.contains('is-streaming')
+        && !document.querySelector('.chat-item.active')?.classList.contains('is-busy'),
+      { timeout: 5000 }
+    );
+  });
+
   test('shows live tool activity and an elapsed-time counter while responding, not just a static label', async () => {
     await createChat(page, 'Live Status Test');
     await createAgent(page, { name: 'Claudia', workingDir: agentDir('claudia'), addToChat: true });
