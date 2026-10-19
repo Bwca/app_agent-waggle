@@ -120,6 +120,27 @@ const FREE_RELAY_MAX_ROUNDS = 20;
 const pendingTurns = new Map();
 
 /**
+ * @typedef {Object} ShownTurn
+ * @property {Set<string>} messageIds - Every chat message in the turn's
+ *   prompt window when it was built, its trigger included.
+ * @property {Promise<import('../store/db.js').Message | null>} reply
+ * @property {boolean} done - The turn ran to completion.
+ */
+
+/**
+ * The latest turn per agent per chat (keyed like pendingTurns) whose prompt
+ * has been built, kept while it runs and after it completes. A trigger the
+ * agent was already shown there gets no turn of its own: a relay fires only
+ * once the whole round it came from has finished, which can be after the
+ * mentioned agent already read the mention as catch-up in a turn that
+ * started meanwhile. Reported live: four agents woken by one reset each
+ * got every teammate's @mention again a few seconds after reading it, and
+ * spent a dozen turns posting "crossed in flight, nothing new".
+ * @type {Map<string, ShownTurn>}
+ */
+const shownTurns = new Map();
+
+/**
  * Reply messages a chain has already relayed, so a reply shared by several
  * chains (see pendingTurns) relays once, not once per chain. Those chains
  * usually reach the relay together, and the second relay folds into the
@@ -1358,6 +1379,15 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, exc
       if (reply) responded.set(agent.id, reply);
       return;
     }
+    const shown = canCoalesce ? shownTurns.get(pendingKey) : undefined;
+    if (shown?.messageIds.has(excludeMessageId)) {
+      // Still running: its reply answers this too, so share it like a
+      // folded turn. Already done: that reply was relayed back then.
+      log.info({ agentId: agent.id, chatId: chat.id, done: shown.done }, 'trigger already shown to agent, no turn queued');
+      const reply = shown.done ? null : await shown.reply;
+      if (reply) responded.set(agent.id, reply);
+      return;
+    }
     /** @type {(reply: import('../store/db.js').Message | null) => void} */
     let settleReply = () => {};
     /** @type {PendingTurn} */
@@ -1371,6 +1401,9 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, exc
     const streamId = uuidv4();
     /** @type {string | null} */
     let promptBuiltAt = null;
+    /** @type {ShownTurn | null} */
+    let shownTurn = null;
+    let ranToCompletion = false;
     // Built when the turn actually starts, not now. A busy agent's turn
     // waits behind the one it's running, and a prompt built at queue time
     // is out of date by the time it's sent: reported live, an agent stuck
@@ -1393,6 +1426,8 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, exc
       const priorMessages = getMessages(chat.id, freshAgent.isObserver ? OBSERVER_HISTORY_LIMIT : 20);
       promptBuiltAt = new Date().toISOString();
       const { message, excludeMessageId: triggerId } = pending.trigger;
+      shownTurn = { messageIds: new Set([...priorMessages.map((m) => m.id), triggerId]), reply: pending.reply, done: false };
+      shownTurns.set(pendingKey, shownTurn);
       const content = buildPromptBlocks(freshAgent, freshChat, freshMembers, message, priorMessages, triggerId, pending.foldedMessageIds);
       logTranscript({ chatId: chat.id, agentId: agent.id, agentName: agent.name, streamId, direction: 'SENT', content });
       return content;
@@ -1470,7 +1505,10 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, exc
       // may have been cut off before its prompt got anywhere, and a local
       // command never reached the model: catching up from the older
       // boundary re-sends a few lines, where moving it would lose them.
-      if (promptBuiltAt && !stopped && !wasLocalCommand) setAgentSeenUntil(agent.id, promptBuiltAt);
+      if (promptBuiltAt && !stopped && !wasLocalCommand) {
+        setAgentSeenUntil(agent.id, promptBuiltAt);
+        ranToCompletion = true;
+      }
 
       if (contextCleared && sessionId) {
         // A "/clear" rotated this agent's CLI session to a brand-new
@@ -1644,6 +1682,12 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, exc
       // A turn that never started (e.g. its workingDir is gone) leaves
       // nothing for later triggers to join.
       if (pendingTurns.get(pendingKey) === pending) pendingTurns.delete(pendingKey);
+      // Same rule as seenUntil: a stopped, local-command or errored turn
+      // doesn't count as having shown the agent anything.
+      if (shownTurn && shownTurns.get(pendingKey) === shownTurn) {
+        if (ranToCompletion) shownTurn.done = true;
+        else shownTurns.delete(pendingKey);
+      }
       settleReply(null);
     }
   }));
