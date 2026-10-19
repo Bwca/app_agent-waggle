@@ -344,7 +344,7 @@ html[data-chat-header="collapsed"] #chat-header-expand-btn { display: block; }
 /* ── Input Area ────────────────────────────────────────────────────── */
 #input-area { padding: 10px 18px 14px; border-top: 1px solid var(--border); position: relative; flex-shrink: 0; }
 
-/* "who's still working" typing bar */
+/* "who's still working" — typing bar, chat-list and agent-panel markers */
 .typing-dots { display: inline-flex; gap: 2px; align-items: center; flex-shrink: 0; }
 .typing-dots i { width: 4px; height: 4px; border-radius: 50%; background: currentColor; animation: typing-dot 1.2s ease-in-out infinite; }
 .typing-dots i:nth-child(2) { animation-delay: .15s; }
@@ -358,8 +358,15 @@ html[data-chat-header="collapsed"] #chat-header-expand-btn { display: block; }
 .typing-chip-name { color: var(--author-color); font-weight: 600; white-space: nowrap; }
 .typing-chip-status { font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 32ch; }
 .typing-chip-elapsed { color: var(--dim); white-space: nowrap; }
+.chat-busy-dots { color: var(--blue); cursor: help; }
+.chat-item:not(.is-busy) .chat-busy-dots { display: none; }
+.agent-streaming { display: none; align-items: center; gap: 5px; font-size: 11px; color: var(--blue); font-style: italic; }
+.agent-item.is-streaming .agent-streaming { display: inline-flex; }
+.agent-item.is-streaming .agent-avatar { animation: agent-streaming-ring 1.6s ease-in-out infinite; }
+@keyframes agent-streaming-ring { 0%, 100% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--blue) 70%, transparent); } 50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--blue) 15%, transparent); } }
 @media (prefers-reduced-motion: reduce) {
   .typing-dots i { animation: none; opacity: .8; }
+  .agent-item.is-streaming .agent-avatar { animation: none; box-shadow: 0 0 0 2px var(--blue); }
 }
 
 #mention-dropdown { position: absolute; bottom: 100%; left: 18px; right: 18px; background: var(--bg1); border: 1px solid var(--bg3); border-radius: 8px; list-style: none; padding: 4px; margin-bottom: 4px; box-shadow: 0 -4px 16px rgba(0,0,0,.4); z-index: 10; }

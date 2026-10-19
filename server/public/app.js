@@ -1201,7 +1201,7 @@ function onStreamStart({ streamId, chatId, agentId, agentName, agentColor }) {
   // snapshot; the bubble stays un-rendered (entry itself is still tracked)
   // until the user pages back to the end.
   if (chatId === activeChatId && (isViewingSearchContext || isViewingLatestPage())) attachStreamingBubble(entry);
-  renderTypingBar();
+  syncStreamingIndicators();
 }
 
 /**
@@ -1238,7 +1238,7 @@ function onStreamSnapshot({ streamId, chatId, agentId, agentName, agentColor, st
   };
   streamingEntries[streamId] = entry;
   if (chatId === activeChatId && (isViewingSearchContext || isViewingLatestPage())) attachStreamingBubble(entry);
-  renderTypingBar();
+  syncStreamingIndicators();
 }
 
 /**
@@ -1394,7 +1394,7 @@ function onStreamEnd({ streamId, chatId, message, agentId, permissionDenials, st
     if (entry.timerId) clearInterval(entry.timerId);
     delete streamingEntries[streamId];
   }
-  renderTypingBar();
+  syncStreamingIndicators();
 
   // An agent reply landing in a chat the user isn't currently looking at —
   // flag it unread. There's nothing to render here either way: any bubble
@@ -1471,7 +1471,7 @@ function onStreamDiscard({ streamId }) {
   if (entry.timerId) clearInterval(entry.timerId);
   entry.el?.remove();
   delete streamingEntries[streamId];
-  renderTypingBar();
+  syncStreamingIndicators();
 }
 
 /**
@@ -1480,6 +1480,47 @@ function onStreamDiscard({ streamId }) {
  * @type {ReturnType<typeof setInterval> | undefined}
  */
 let typingBarTimerId;
+
+/**
+ * Re-syncs every "who's still working" signal after a stream starts or
+ * stops: the typing bar above the composer, the busy marker on each agent
+ * in the agent panel, and the one on each chat in the chat list. The last
+ * two toggle a class on rows already rendered instead of re-rendering the
+ * list, so an open agent ⋮ menu or a chat being renamed isn't torn down
+ * every time some agent starts or finishes a turn.
+ */
+function syncStreamingIndicators() {
+  renderTypingBar();
+  const entries = Object.values(streamingEntries);
+  const streamingAgentIds = new Set(entries.map((e) => e.agentId));
+  const busyChatIds = new Set(entries.map((e) => e.chatId));
+  for (const li of agentList.querySelectorAll('.agent-item')) {
+    li.classList.toggle('is-streaming', streamingAgentIds.has(li.dataset.agentId));
+  }
+  for (const li of chatList.querySelectorAll('.chat-item')) {
+    li.classList.toggle('is-busy', busyChatIds.has(li.dataset.chatId));
+  }
+}
+
+/**
+ * Whether any turn is in flight in `chatId` — for the chat list's busy
+ * marker at render time (syncStreamingIndicators keeps it current after).
+ * @param {string} chatId
+ * @returns {boolean}
+ */
+function isChatBusy(chatId) {
+  return Object.values(streamingEntries).some((e) => e.chatId === chatId);
+}
+
+/**
+ * Whether `agentId` has a turn in flight — the agent panel's counterpart
+ * to isChatBusy.
+ * @param {string} agentId
+ * @returns {boolean}
+ */
+function isAgentStreaming(agentId) {
+  return Object.values(streamingEntries).some((e) => e.agentId === agentId);
+}
 
 /**
  * The strip above the composer naming every agent still working in the
@@ -1869,7 +1910,7 @@ function onStreamError({ streamId, error }) {
   const entry = streamingEntries[streamId];
   if (!entry) return;
   delete streamingEntries[streamId];
-  renderTypingBar();
+  syncStreamingIndicators();
   if (!entry.el) return; // errored while its chat wasn't active — not persisted server-side, so nothing to show later either
   stopStreamStatus(entry);
   entry.body.textContent = t('errors.streamErrorPrefix', { error });
@@ -2922,12 +2963,13 @@ function setCollapsedCategories(collapsed) {
 function buildChatItem(chat) {
   const li = document.createElement('li');
   const unread = unreadChatIds.has(chat.id);
-  li.className = 'chat-item' + (chat.id === activeChatId ? ' active' : '') + (unread ? ' has-unread' : '');
+  li.className = 'chat-item' + (chat.id === activeChatId ? ' active' : '') + (unread ? ' has-unread' : '') + (isChatBusy(chat.id) ? ' is-busy' : '');
   li.dataset.chatId = chat.id;
   li.dataset.testid = 'chat-item';
   li.innerHTML = `
     ${unread ? `<span class="chat-unread-dot" data-testid="chat-unread-dot" title="${t('chat.unreadTitle')}"></span>` : ''}
     <span class="chat-item-name" data-testid="chat-item-name" title="${escHtml(chat.name)}">${t('chat.channelName', { name: escHtml(chat.name) })}</span>
+    <span class="typing-dots chat-busy-dots" data-testid="chat-busy-dots" title="${t('chat.busyTitle')}"><i></i><i></i><i></i></span>
     <button class="chat-tag-btn" data-testid="chat-tag-btn" data-tag-chat="${chat.id}" title="${t('category.assignTitle')}">🏷️</button>
     <button class="chat-rename-btn" data-testid="chat-rename-btn" data-rename-chat="${chat.id}" title="${t('chat.renameTitle')}">✏️</button>
     <button class="chat-del-btn" data-testid="chat-del-btn" data-del-chat="${chat.id}" title="${t('chat.deleteTitle')}">×</button>
@@ -3238,13 +3280,14 @@ function renderAgentPanel() {
   for (const agent of members) {
     const hasUnseen = unseenOutsideFocusAgentIds.has(agent.id);
     const li = document.createElement('li');
-    li.className = 'agent-item' + (hasUnseen ? ' has-unseen-outside-focus' : '');
+    li.className = 'agent-item' + (hasUnseen ? ' has-unseen-outside-focus' : '') + (isAgentStreaming(agent.id) ? ' is-streaming' : '');
     li.dataset.testid = 'agent-item';
     li.dataset.agentId = agent.id;
     li.innerHTML = `
       <div class="agent-avatar" style="background:${agentDisplayColor(agent.color)}">${agent.name[0].toUpperCase()}</div>
       <div class="agent-info">
         <span class="agent-name" data-testid="agent-name">${escHtml(agent.name)}${hasUnseen ? ` <span class="agent-unseen-dot" data-testid="agent-unseen-dot" title="${t('agent.unseenOutsideFocusTitle', { name: agent.name })}"></span>` : ''}${agent.dangerouslySkipPermissions ? ` <span class="agent-yolo-badge" data-testid="agent-yolo-badge" title="${t('agent.yoloBadgeTitle')}">🔥</span>` : ''}${agent.isObserver ? ` <span class="agent-observer-badge" data-testid="agent-observer-badge" title="${t('agent.observerBadgeTitle')}">👁</span>` : ''}${agent.chromeAccess ? ` <span class="agent-chrome-badge" data-testid="agent-chrome-badge" title="${t('agent.chromeBadgeTitle')}">🌐</span>` : ''}</span>
+        <span class="agent-streaming" data-testid="agent-streaming"><span class="typing-dots" aria-hidden="true"><i></i><i></i><i></i></span> ${t('chat.respondingLabel')}</span>
         <span class="agent-dir" title="${escHtml(agent.workingDir)}">${escHtml(shortDir(agent.workingDir))}</span>
         ${agent.model ? `<span class="agent-model" data-testid="agent-model" title="${t('agent.modelTitle', { model: escHtml(agent.model) })}">🧠 ${escHtml(formatModelLabel(agent.model))}</span>` : ''}
         ${renderUsageBadge(agent)}

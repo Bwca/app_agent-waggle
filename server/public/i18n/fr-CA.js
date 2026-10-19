@@ -35,6 +35,7 @@ export default {
   'chat.elapsedSeconds': '({seconds} s)',
   'chat.typingWritingLabel': "en train d'écrire…",
   'chat.typingChipTitle': '{name} : {status} — cliquer pour aller à la réponse',
+  'chat.busyTitle': 'Des agents répondent dans cette discussion',
   'chat.stopBtn': 'Arrêter',
   'chat.stopTitle': 'Interrompre cette réponse',
   'chat.stoppingLabel': 'Arrêt en cours…',

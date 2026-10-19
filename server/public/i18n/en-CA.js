@@ -35,6 +35,7 @@ export default {
   'chat.elapsedSeconds': '({seconds}s)',
   'chat.typingWritingLabel': 'writing…',
   'chat.typingChipTitle': '{name}: {status} — click to jump to the reply',
+  'chat.busyTitle': 'Agents are replying in this chat',
   'chat.stopBtn': 'Stop',
   'chat.stopTitle': 'Interrupt this response',
   'chat.stoppingLabel': 'Stopping…',
