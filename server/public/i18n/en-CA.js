@@ -33,6 +33,8 @@ export default {
   'chat.micNoSpeechError': 'Didn\'t catch that — try again',
   'chat.respondingLabel': 'responding…',
   'chat.elapsedSeconds': '({seconds}s)',
+  'chat.typingWritingLabel': 'writing…',
+  'chat.typingChipTitle': '{name}: {status} — click to jump to the reply',
   'chat.stopBtn': 'Stop',
   'chat.stopTitle': 'Interrupt this response',
   'chat.stoppingLabel': 'Stopping…',

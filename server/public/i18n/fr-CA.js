@@ -33,6 +33,8 @@ export default {
   'chat.micNoSpeechError': 'Rien entendu — réessayez',
   'chat.respondingLabel': 'en train de répondre…',
   'chat.elapsedSeconds': '({seconds} s)',
+  'chat.typingWritingLabel': "en train d'écrire…",
+  'chat.typingChipTitle': '{name} : {status} — cliquer pour aller à la réponse',
   'chat.stopBtn': 'Arrêter',
   'chat.stopTitle': 'Interrompre cette réponse',
   'chat.stoppingLabel': 'Arrêt en cours…',

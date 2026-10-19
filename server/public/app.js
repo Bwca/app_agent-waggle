@@ -602,6 +602,7 @@ const pageIndicator    = $('#page-indicator');
 const pageNextBtn      = $('#page-next-btn');
 const pageLastBtn      = $('#page-last-btn');
 const messageList      = $('#message-list');
+const typingBar        = $('#typing-bar');
 const msgInput         = $('#msg-input');
 const scheduleBtn      = $('#schedule-btn');
 const micBtn           = $('#mic-btn');
@@ -1200,6 +1201,7 @@ function onStreamStart({ streamId, chatId, agentId, agentName, agentColor }) {
   // snapshot; the bubble stays un-rendered (entry itself is still tracked)
   // until the user pages back to the end.
   if (chatId === activeChatId && (isViewingSearchContext || isViewingLatestPage())) attachStreamingBubble(entry);
+  renderTypingBar();
 }
 
 /**
@@ -1236,6 +1238,7 @@ function onStreamSnapshot({ streamId, chatId, agentId, agentName, agentColor, st
   };
   streamingEntries[streamId] = entry;
   if (chatId === activeChatId && (isViewingSearchContext || isViewingLatestPage())) attachStreamingBubble(entry);
+  renderTypingBar();
 }
 
 /**
@@ -1341,6 +1344,7 @@ function onStreamChunk({ streamId, text }) {
   if (text && !entry.typingHidden) {
     entry.typingHidden = true;
     if (entry.el) stopStreamStatus(entry);
+    renderTypingBar();
   }
   entry.rawText += text;
   // Re-rendered from the full accumulated text each time, not patched
@@ -1376,6 +1380,7 @@ function onStreamStatus({ streamId, status }) {
     entry.typingHidden = false;
     if (entry.el) showStreamStatus(entry);
   }
+  renderTypingBar();
 }
 
 /**
@@ -1389,6 +1394,7 @@ function onStreamEnd({ streamId, chatId, message, agentId, permissionDenials, st
     if (entry.timerId) clearInterval(entry.timerId);
     delete streamingEntries[streamId];
   }
+  renderTypingBar();
 
   // An agent reply landing in a chat the user isn't currently looking at —
   // flag it unread. There's nothing to render here either way: any bubble
@@ -1465,6 +1471,65 @@ function onStreamDiscard({ streamId }) {
   if (entry.timerId) clearInterval(entry.timerId);
   entry.el?.remove();
   delete streamingEntries[streamId];
+  renderTypingBar();
+}
+
+/**
+ * Timer ticking the typing bar's elapsed-time labels — runs only while the
+ * bar has something to show (see renderTypingBar).
+ * @type {ReturnType<typeof setInterval> | undefined}
+ */
+let typingBarTimerId;
+
+/**
+ * The strip above the composer naming every agent still working in the
+ * active chat, with what it's doing right now and for how long — the
+ * "X is typing…" of a group chat. Each streaming bubble already says this,
+ * but with several agents replying at once (and finished replies landing in
+ * between) those bubbles end up scattered up the scrollback, where the user
+ * can't tell at a glance who's still going. A chip jumps to its bubble.
+ */
+function renderTypingBar() {
+  clearInterval(typingBarTimerId);
+  typingBarTimerId = undefined;
+  const entries = Object.values(streamingEntries).filter((e) => e.chatId === activeChatId);
+  typingBar.hidden = entries.length === 0;
+  typingBar.innerHTML = '';
+  if (!entries.length) return;
+
+  for (const entry of entries) {
+    const color = agentDisplayColor(entry.agentColor);
+    // Text flowing hides the bubble's status row, so the chip says so
+    // instead of repeating a status the agent has moved past.
+    const status = entry.typingHidden ? t('chat.typingWritingLabel') : (entry.statusText || t('chat.respondingLabel'));
+    const chip = document.createElement('button');
+    chip.className = 'typing-chip';
+    chip.dataset.testid = 'typing-chip';
+    chip.dataset.agentId = entry.agentId;
+    chip.style.setProperty('--author-color', color);
+    chip.title = t('chat.typingChipTitle', { name: entry.agentName, status });
+    chip.innerHTML = `
+      <span class="typing-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span class="typing-chip-name">${escHtml(entry.agentName)}</span>
+      <span class="typing-chip-status" data-testid="typing-chip-status">${escHtml(status)}</span>
+      <span class="typing-chip-elapsed" data-started-at="${entry.startedAt}"></span>`;
+    chip.addEventListener('click', () => {
+      if (!entry.el || entry.el.hidden) return;
+      entry.el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      entry.el.classList.remove('highlight-flash');
+      void entry.el.offsetWidth; // restart the animation on a repeat click
+      entry.el.classList.add('highlight-flash');
+    });
+    typingBar.appendChild(chip);
+  }
+
+  const tick = () => {
+    for (const el of typingBar.querySelectorAll('.typing-chip-elapsed')) {
+      el.textContent = t('chat.elapsedSeconds', { seconds: Math.floor((Date.now() - Number(el.dataset.startedAt)) / 1000) });
+    }
+  };
+  tick();
+  typingBarTimerId = setInterval(tick, 1000);
 }
 
 /**
@@ -1804,6 +1869,7 @@ function onStreamError({ streamId, error }) {
   const entry = streamingEntries[streamId];
   if (!entry) return;
   delete streamingEntries[streamId];
+  renderTypingBar();
   if (!entry.el) return; // errored while its chat wasn't active — not persisted server-side, so nothing to show later either
   stopStreamStatus(entry);
   entry.body.textContent = t('errors.streamErrorPrefix', { error });
@@ -3536,6 +3602,7 @@ async function selectChat(id, opts = {}) {
     if (entry.el) detachStreamingBubble(entry);
   }
   messageList.innerHTML = '';
+  renderTypingBar();
 
   // Lands on the latest page and (since that's always where 'last' lands)
   // reattaches any stream still running in this chat — e.g. the user asked
