@@ -92,3 +92,22 @@ describe('stored agents', () => {
     assert.equal(db.getAgent(other.id).provider, 'opencode');
   });
 });
+
+describe('provider display details', () => {
+  test('every provider the UI offers is one the server can run', async () => {
+    const { PROVIDER_IDS, providerDisplayFor } = await import('../../server/public/agentProviders.js');
+    const { hasProvider } = await import('../../server/services/providers/index.js');
+    for (const id of PROVIDER_IDS) {
+      assert.ok(hasProvider(id), id);
+      assert.equal(providerDisplayFor(id).id, id);
+    }
+    assert.equal(PROVIDER_IDS[0], DEFAULT_PROVIDER_ID);
+    assert.ok(PROVIDER_IDS.includes('opencode'));
+  });
+
+  test('formats each provider\'s model ids its own way', async () => {
+    const { providerDisplayFor } = await import('../../server/public/agentProviders.js');
+    assert.equal(providerDisplayFor('claude').formatModel('claude-opus-4-1-20250805'), 'Opus 4.1');
+    assert.equal(providerDisplayFor('opencode').formatModel('ollama/local-agent'), 'local-agent');
+  });
+});
