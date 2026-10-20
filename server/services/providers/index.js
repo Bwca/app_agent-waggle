@@ -14,6 +14,7 @@
  */
 
 import { claudeProvider } from './claude.js';
+import { opencodeProvider } from './opencode.js';
 import { DEFAULT_PROVIDER_ID } from '../../public/agentProviders.js';
 
 /**
@@ -182,7 +183,7 @@ import { DEFAULT_PROVIDER_ID } from '../../public/agentProviders.js';
 export { DEFAULT_PROVIDER_ID };
 
 /** @type {Map<string, AgentProvider>} */
-const providers = new Map([[claudeProvider.id, claudeProvider]]);
+const providers = new Map([claudeProvider, opencodeProvider].map((provider) => [provider.id, provider]));
 
 /**
  * @param {string} [id]
