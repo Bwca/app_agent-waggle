@@ -7,7 +7,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { DEFAULT_PROVIDER_ID, getProvider, providerForAgent } from '../../server/services/providers/index.js';
-import { claudeProvider } from '../../server/services/providers/claude.js';
+import { claudeProvider, encodeTurn } from '../../server/services/providers/claude.js';
 
 describe('agent provider registry', () => {
   test('defaults to Claude', () => {
@@ -57,7 +57,11 @@ describe('Claude provider', () => {
 
   test('writes one stream-json user message per turn', () => {
     const content = [{ type: 'text', text: 'hi' }];
-    assert.equal(claudeProvider.encodeTurn(content), '{"type":"user","message":{"role":"user","content":[{"type":"text","text":"hi"}]}}\n');
+    assert.equal(encodeTurn(content), '{"type":"user","message":{"role":"user","content":[{"type":"text","text":"hi"}]}}\n');
+    const written = [];
+    const state = claudeProvider.createProcessState({ id: 'a', workingDir: '/work' }, { write: (data) => written.push(data) });
+    claudeProvider.startTurn(state, content);
+    assert.deepEqual(written, [encodeTurn(content)]);
   });
 
   test('reads skills and MCP status off init, and nothing else as turn content', () => {

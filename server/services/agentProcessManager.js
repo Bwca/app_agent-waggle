@@ -529,7 +529,9 @@ function spawnProcess(agent) {
   });
 
   /** @type {ManagedProcess} */
-  const proc = { child, agentId: agent.id, provider, providerState: provider.createProcessState(), buffer: '', currentTurn: null, retiring: null, background: null, backgroundStream: null, backgroundTasks: [], queue: Promise.resolve(), skills: lastKnownSkills.get(agent.id) ?? [] };
+  const proc = { child, agentId: agent.id, provider, providerState: null, buffer: '', currentTurn: null, retiring: null, background: null, backgroundStream: null, backgroundTasks: [], queue: Promise.resolve(), skills: lastKnownSkills.get(agent.id) ?? [] };
+
+  proc.providerState = provider.createProcessState(agent, { write: (data) => child.stdin.write(data) });
 
   child.stdout.setEncoding('utf-8');
   child.stdout.on('data', (chunk) => {
@@ -540,6 +542,7 @@ function spawnProcess(agent) {
       const parsed = provider.parseLine(line);
       if (!parsed) continue;
       const event = provider.normalizeEvent(proc.providerState, parsed);
+      if (!event) continue;
       const signal = provider.inspectEvent(event);
       // The one piece of information that would have made the Windows MCP
       // investigation trivial instead of requiring hours of empirical
@@ -573,9 +576,10 @@ function spawnProcess(agent) {
 
     // Flush a trailing unparsed line (no final newline) before signaling exit.
     if (proc.buffer.trim()) {
-      const event = provider.parseLine(proc.buffer);
+      const parsed = provider.parseLine(proc.buffer);
       proc.buffer = '';
-      if (event) proc.currentTurn?.handleEvent(provider.normalizeEvent(proc.providerState, event));
+      const event = parsed && provider.normalizeEvent(proc.providerState, parsed);
+      if (event) proc.currentTurn?.handleEvent(event);
     }
     proc.currentTurn?.handleExit(code, sig);
     // An unsolicited turn cut off mid-way (stopped, crashed) never reaches
@@ -789,7 +793,11 @@ function runOneTurn(proc, content, { onChunk, onStatus, signal }) {
       },
     };
 
-    proc.child.stdin.write(provider.encodeTurn(blocks));
+    // A handshake the provider still has to do first can fail; that fails
+    // this turn like any other error, rather than leaving it waiting forever.
+    Promise.resolve()
+      .then(() => provider.startTurn(proc.providerState, blocks))
+      .catch((err) => fail(t('errors.agentExecutionError', { provider: provider.displayName, message: err.message })));
   });
 }
 

@@ -224,10 +224,12 @@ export function runAgentStream({ agent, content, onChunk, onStatus, signal }) {
  * blocking creation with a real, costly round-trip.
  *
  * @param {import('./providers/index.js').AgentProvider} [provider]
+ * @param {{ workingDir?: string }} [agent] - The agent-to-be, for a provider
+ *   that resolves its binary per project (see AgentProvider.versionCommand).
  * @returns {Promise<{ ok: true } | { ok: false, error: string }>}
  */
-export async function verifyProviderAvailable(provider = getProvider()) {
-  const { command, args } = provider.versionCommand();
+export async function verifyProviderAvailable(provider = getProvider(), agent = undefined) {
+  const { command, args } = provider.versionCommand(agent);
   return new Promise((resolve) => {
     const child = spawn(command, args, { stdio: ['ignore', 'ignore', 'pipe'] });
     let stderr = '';

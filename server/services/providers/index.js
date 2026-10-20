@@ -29,17 +29,25 @@ import { DEFAULT_PROVIDER_ID } from '../../public/agentProviders.js';
  *   `autocompactDefault` is the compaction window from Settings (see
  *   setAutocompactDefault in agentProcessManager.js); a provider with no
  *   such notion ignores it.
- * @property {() => { command: string, args: string[] }} versionCommand - A
+ * @property {(agent?: { workingDir?: string }) => { command: string, args: string[] }} versionCommand - A
  *   cheap no-model-call invocation, used to verify the binary resolves
  *   before an agent is created (see agentRunner.js's verifyProviderAvailable).
- * @property {(content: import('../agentRunner.js').ContentBlock[]) => string} encodeTurn -
- *   The exact stdin line (newline included) that starts one turn.
+ *   Gets the agent-to-be when there is one, for a provider that resolves its
+ *   binary per project.
+ * @property {(state: object, content: import('../agentRunner.js').ContentBlock[]) => void | Promise<void>} startTurn -
+ *   Writes whatever starts one turn to the process, through the `write` the
+ *   state was created with. A provider whose protocol needs a handshake
+ *   before the first turn does it here, so it can be async; a rejection
+ *   fails the turn.
  * @property {(line: string) => object | null} parseLine
- * @property {() => object} createProcessState - Per-process scratch state
- *   the provider needs across events (e.g. a running-total baseline).
- * @property {(state: object, event: object) => object} normalizeEvent -
+ * @property {(agent: import('../../store/db.js').Agent, io: { write: (data: string) => void }) => object} createProcessState -
+ *   Per-process state the provider needs across events (e.g. a running-total
+ *   baseline, or a protocol connection), created once per spawn. `write`
+ *   goes to the process's stdin.
+ * @property {(state: object, event: object) => object | null} normalizeEvent -
  *   Runs on every parsed event, foreground or unsolicited, before anything
- *   else reads it.
+ *   else reads it. Null means the provider consumed the event itself (a
+ *   reply to its own handshake, say) and nothing else should see it.
  * @property {(event: object) => ProcessSignal} inspectEvent
  * @property {(callbacks?: { onChunk?: (text: string) => void, onStatus?: (status: string) => void }) => TurnAccumulator} createTurnAccumulator
  * @property {(text: string) => boolean} looksLikeAuthFailure - True when a

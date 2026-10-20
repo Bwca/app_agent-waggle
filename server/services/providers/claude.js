@@ -475,15 +475,24 @@ function inspectEvent(event) {
   return signal;
 }
 
+/**
+ * The stdin line that starts one turn: a single stream-json user message.
+ * @param {import('../agentRunner.js').ContentBlock[]} content
+ * @returns {string}
+ */
+export function encodeTurn(content) {
+  return JSON.stringify({ type: 'user', message: { role: 'user', content } }) + '\n';
+}
+
 /** @type {import('./index.js').AgentProvider} */
 export const claudeProvider = {
   id: 'claude',
   displayName: 'Claude',
   spawnCommand: (agent, options) => ({ command: CLAUDE_BIN, args: buildArgs(agent, options) }),
   versionCommand: () => ({ command: CLAUDE_BIN, args: ['--version'] }),
-  encodeTurn: (content) => JSON.stringify({ type: 'user', message: { role: 'user', content } }) + '\n',
+  startTurn: (state, content) => state.write(encodeTurn(content)),
   parseLine,
-  createProcessState: () => ({ costSoFar: 0 }),
+  createProcessState: (_agent, { write }) => ({ write, costSoFar: 0 }),
   normalizeEvent: withPerTurnCost,
   inspectEvent,
   createTurnAccumulator,
