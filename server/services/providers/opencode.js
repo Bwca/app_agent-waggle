@@ -465,7 +465,12 @@ export function createTurnAccumulator({ onChunk, onStatus } = {}) {
           };
         }
         turn.resultText = turn.fullText;
-        if (event.error) turn.errorMessage = event.error.message ?? 'unknown error';
+        // Confirmed live: when a rejected permission stops the model,
+        // opencode can answer the prompt with an error ("Internal error:
+        // The user rejected permission…") instead of a normal stopReason.
+        // The denial already says why the turn stopped, and it has to reach
+        // the user as a permission card, not as a failed turn.
+        if (event.error && !turn.permissionDenials.length) turn.errorMessage = event.error.message ?? 'unknown error';
         else if (event.result?.stopReason === 'refusal') turn.errorMessage = 'the model refused to continue';
         turn.done = true;
         return;

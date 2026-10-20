@@ -160,6 +160,21 @@ describe('opencode provider', () => {
     assert.equal(turn.errorMessage, 'model unreachable');
   });
 
+  test('a prompt error caused by a rejected permission ends the turn normally, with the denial', () => {
+    const { state, receive } = connect();
+    state.promptId = 4;
+    const turn = opencodeProvider.createTurnAccumulator();
+    turn.handleEvent(receive({
+      id: 0,
+      method: 'session/request_permission',
+      params: { toolCall: { toolCallId: 't1', kind: 'execute', rawInput: { command: 'echo hi' } }, options: [{ optionId: 'reject', kind: 'reject_once' }] },
+    }));
+    turn.handleEvent(receive({ id: 4, error: { code: -32603, message: 'Internal error: The user rejected permission to use this specific tool call.' } }));
+    assert.equal(turn.done, true);
+    assert.equal(turn.errorMessage, null);
+    assert.equal(turn.permissionDenials.length, 1);
+  });
+
   test('reports the commands its session offers as skills, and nothing as unsolicited turn content', () => {
     const signal = opencodeProvider.inspectEvent(update('available_commands_update', { availableCommands: [{ name: 'review' }, { name: 'docs' }] }));
     assert.deepEqual(signal, { isTurnContent: false, skills: ['review', 'docs'] });
