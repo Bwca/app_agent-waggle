@@ -222,15 +222,17 @@ export default function createAgentsRouter(wss) {
   /**
    * GET /api/agents/:id/commands
    * Lists the agent's slash commands for the composer's "/" autocomplete:
-   * its project-level custom commands (.claude/commands/*.md in its
-   * workingDir) merged with the built-in/marketplace/plugin skills its own
-   * live process actually reported having (empty until that process has
-   * spawned at least once — see getAgentSkills).
+   * its project-level custom commands (*.md files in its provider's
+   * command directories under its workingDir, .claude/commands for Claude)
+   * merged with the built-in/marketplace/plugin skills its own live process
+   * actually reported having (empty until that process has spawned at
+   * least once — see getAgentSkills).
    */
   router.get('/:id/commands', (req, res) => {
     const agent = getAgent(req.params.id);
     if (!agent) return res.status(404).json({ error: t('errors.agentNotFound') });
-    res.json(mergeSkills(listAgentCommands(agent.workingDir), getAgentSkills(agent.id)));
+    const provider = providerForAgent(agent);
+    res.json(mergeSkills(listAgentCommands(agent.workingDir, provider.commandDirs), getAgentSkills(agent.id), provider.builtinCommands));
   });
 
   /**

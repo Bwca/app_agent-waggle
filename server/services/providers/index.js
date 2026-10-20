@@ -53,6 +53,11 @@ import { DEFAULT_PROVIDER_ID } from '../../public/agentProviders.js';
  * @property {(text: string) => boolean} looksLikeAuthFailure - True when a
  *   finished turn's text means the process holds stale auth and should be
  *   respawned.
+ * @property {string[]} commandDirs - Where a project keeps its custom slash
+ *   commands (`*.md` files), relative to the agent's workingDir.
+ * @property {Set<string>} builtinCommands - The CLI's own commands that are
+ *   always offered and forwarded, whether or not its process reported them
+ *   (see commands.js's ALLOWED_BUILTIN_COMMANDS for Claude's).
  * @property {(toolName: string, value: string) => PermissionGrant} grantFor -
  *   What granting one denied tool call (as the permission card shows it:
  *   a path, a command, or a JSON dump of its input) should store on the

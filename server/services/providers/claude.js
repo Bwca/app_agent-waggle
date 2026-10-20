@@ -8,6 +8,7 @@
 
 import { basename, dirname } from 'path';
 import { commandPrefixes } from './shellCommands.js';
+import { ALLOWED_BUILTIN_COMMANDS } from '../commands.js';
 
 /** @typedef {import('./index.js').ToolCall} ToolCall */
 /** @typedef {import('./index.js').TurnAccumulator} TurnAccumulator */
@@ -553,6 +554,8 @@ export const claudeProvider = {
   inspectEvent,
   createTurnAccumulator,
   looksLikeAuthFailure: looksLikeMcpAuthFailure,
+  commandDirs: ['.claude/commands'],
+  builtinCommands: ALLOWED_BUILTIN_COMMANDS,
   grantFor,
   // Only Bash patterns can cover one another: a file-path tool's "pattern"
   // is just its bare name, so comparing those would hide a second,

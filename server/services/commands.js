@@ -1,6 +1,7 @@
 /**
- * @fileoverview Lists an agent's custom Claude Code slash commands, read
- * straight from its project's `.claude/commands/*.md` files — the same
+ * @fileoverview Lists an agent's custom slash commands, read straight from
+ * its project's command directory (`.claude/commands/*.md` for Claude; each
+ * provider names its own, see AgentProvider.commandDirs) — the same
  * mechanism `parseSkillInvocation` (messageRouter.js) relies on to actually
  * invoke one. Used to power the composer's slash-command autocomplete;
  * purely a filesystem read, no `claude` subprocess involved.
@@ -69,17 +70,33 @@ function parseFrontmatterDescription(raw) {
 
 /**
  * Lists the custom slash commands available to an agent working in
- * `workingDir` — every `.md` file directly inside `.claude/commands/`
- * (project-level only; not recursing into subdirectories, and not
- * including any user-level `~/.claude/commands/` — see file header for why
- * that's an acceptable scope for now). Returns `[]` if the directory
- * doesn't exist, rather than treating that as an error — most agents won't
- * have any custom commands defined.
+ * `workingDir` — every `.md` file directly inside its provider's command
+ * directories (`.claude/commands/` by default; project-level only, not
+ * recursing into subdirectories, and not including any user-level
+ * `~/.claude/commands/` — see file header for why that's an acceptable
+ * scope for now). A directory that doesn't exist contributes nothing,
+ * rather than being an error — most agents won't have any custom commands
+ * defined. The first directory wins a name both define.
  * @param {string} workingDir
+ * @param {string[]} [dirs] - Paths relative to workingDir, from the agent's
+ *   provider (AgentProvider.commandDirs).
  * @returns {SlashCommand[]} Sorted alphabetically by name
  */
-export function listAgentCommands(workingDir) {
-  const dir = join(workingDir, '.claude', 'commands');
+export function listAgentCommands(workingDir, dirs = ['.claude/commands']) {
+  const commands = new Map();
+  for (const relative of dirs) {
+    for (const command of listCommandDir(join(workingDir, relative))) {
+      if (!commands.has(command.name)) commands.set(command.name, command);
+    }
+  }
+  return [...commands.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * @param {string} dir
+ * @returns {SlashCommand[]}
+ */
+function listCommandDir(dir) {
   if (!existsSync(dir)) return [];
 
   return readdirSync(dir)
@@ -94,8 +111,7 @@ export function listAgentCommands(workingDir) {
         // — still list the command by name, just without a description.
       }
       return { name, description, builtin: false };
-    })
-    .sort((a, b) => a.name.localeCompare(b.name));
+    });
 }
 
 /**
@@ -115,11 +131,13 @@ export function listAgentCommands(workingDir) {
  * @param {SlashCommand[]} projectCommands - From listAgentCommands.
  * @param {string[]} builtinSkillNames - From agentProcessManager's
  *   getAgentSkills.
+ * @param {Set<string>} [alwaysOffered] - The provider's own built-ins that
+ *   are always forwardable (AgentProvider.builtinCommands).
  * @returns {SlashCommand[]} Sorted alphabetically by name.
  */
-export function mergeSkills(projectCommands, builtinSkillNames) {
+export function mergeSkills(projectCommands, builtinSkillNames, alwaysOffered = ALLOWED_BUILTIN_COMMANDS) {
   const projectNames = new Set(projectCommands.map((c) => c.name));
-  const builtinNames = new Set([...builtinSkillNames, ...ALLOWED_BUILTIN_COMMANDS]);
+  const builtinNames = new Set([...builtinSkillNames, ...alwaysOffered]);
   const builtins = [...builtinNames]
     .filter((name) => !projectNames.has(name))
     .map((name) => ({ name, description: null, builtin: true }));

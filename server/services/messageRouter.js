@@ -2,8 +2,9 @@
  * @fileoverview Parses @mention patterns to determine which agents should respond.
  */
 
-import { listAgentCommands, ALLOWED_BUILTIN_COMMANDS } from './commands.js';
+import { listAgentCommands } from './commands.js';
 import { getAgentSkills } from './agentProcessManager.js';
+import { providerForAgent } from './providers/index.js';
 
 /**
  * Builds a regex alternation matching any of the given agents' names,
@@ -123,8 +124,9 @@ export function parseSkillInvocation(content, chatMembers) {
   const agent = chatMembers.find((a) => a.name.toLowerCase() === match[1].toLowerCase());
   if (!agent) return null;
   const commandName = match[2].slice(1).split(/\s/)[0];
-  const isRegisteredCommand = listAgentCommands(agent.workingDir).some((c) => c.name === commandName)
+  const provider = providerForAgent(agent);
+  const isRegisteredCommand = listAgentCommands(agent.workingDir, provider.commandDirs).some((c) => c.name === commandName)
     || getAgentSkills(agent.id).includes(commandName)
-    || ALLOWED_BUILTIN_COMMANDS.has(commandName);
+    || provider.builtinCommands.has(commandName);
   return isRegisteredCommand ? { agent, command: match[2] } : null;
 }
