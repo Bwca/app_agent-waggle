@@ -24,7 +24,7 @@ export const DEFAULT_PROVIDER_ID = 'claude';
  * @property {string[] | null} modelAliases - Model-family shortcuts the
  *   model picker offers, or null when models are only ever typed as exact
  *   ids.
- * @property {string} modelPlaceholder - Example of an exact model id.
+ * @property {string} modelExample - An exact model id, as a placeholder.
  * @property {boolean} autocompact - Whether the agent's context-compaction
  *   window (autocompactOverride, and the Settings default) applies.
  * @property {boolean} chromeAccess - Whether browser access can be granted.
@@ -63,7 +63,7 @@ const PROVIDER_DISPLAYS = {
       'Claudelle', 'Claudian', 'Clavius', 'Claudel', 'Claudiano', 'Claudino',
     ],
     modelAliases: ['opus', 'sonnet', 'haiku', 'fable'],
-    modelPlaceholder: 'e.g. claude-opus-4-1-20250805',
+    modelExample: 'claude-opus-4-1-20250805',
     autocompact: true,
     chromeAccess: true,
     resumeCommand: (resumeId) => `claude --resume ${resumeId}`,
@@ -79,7 +79,7 @@ const PROVIDER_DISPLAYS = {
       'Codrin', 'Codina', 'Opaline', 'Oppie',
     ],
     modelAliases: null,
-    modelPlaceholder: 'e.g. ollama/local-agent',
+    modelExample: 'ollama/local-agent',
     autocompact: false,
     chromeAccess: false,
     resumeCommand: (resumeId) => `opencode --session ${resumeId}`,
