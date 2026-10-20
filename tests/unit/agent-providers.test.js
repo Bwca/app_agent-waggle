@@ -80,3 +80,15 @@ describe('Claude provider', () => {
     }
   });
 });
+
+describe('stored agents', () => {
+  test('an agent carries the provider it was created with, defaulting to Claude', async () => {
+    process.env.APP_DB_FILE = ':memory:';
+    const db = await import('../../server/store/db.js');
+    await db.loadDb();
+    const plain = await db.createAgent({ id: 'p1', name: 'Plain', color: '#fff', workingDir: '/tmp' });
+    assert.equal(plain.provider, 'claude');
+    const other = await db.createAgent({ id: 'p2', name: 'Other', color: '#fff', workingDir: '/tmp', provider: 'opencode' });
+    assert.equal(db.getAgent(other.id).provider, 'opencode');
+  });
+});

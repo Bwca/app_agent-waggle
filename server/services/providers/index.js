@@ -195,10 +195,17 @@ export function getProvider(id = DEFAULT_PROVIDER_ID) {
 }
 
 /**
- * The provider an agent runs as. Agents carry no `provider` field yet —
- * every one is Claude — so this falls back to the default until that
- * column exists.
- * @param {import('../../store/db.js').Agent & { provider?: string }} agent
+ * @param {string} id
+ * @returns {boolean}
+ */
+export function hasProvider(id) {
+  return providers.has(id);
+}
+
+/**
+ * The provider an agent runs as. Every stored agent has one; the fallback
+ * is for an agent-shaped object that doesn't (a test fixture, say).
+ * @param {import('../../store/db.js').Agent} agent
  * @returns {AgentProvider}
  */
 export function providerForAgent(agent) {
