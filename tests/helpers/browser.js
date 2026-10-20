@@ -123,16 +123,18 @@ export async function createChat(p, name) {
 /**
  * Opens the "New Agent" modal and fills in the form.
  * @param {import('puppeteer').Page} p
- * @param {{ name: string, workingDir: string, addToChat?: boolean, yoloMode?: boolean, observerMode?: boolean, note?: string }} opts
+ * `provider` picks the agent's provider in the form; the default otherwise.
+ * @param {{ name: string, workingDir: string, provider?: string, addToChat?: boolean, yoloMode?: boolean, observerMode?: boolean, note?: string }} opts
  * @returns {Promise<void>}
  */
-export async function createAgent(p, { name, workingDir, addToChat = true, yoloMode = false, observerMode = false, note }) {
+export async function createAgent(p, { name, workingDir, provider, addToChat = true, yoloMode = false, observerMode = false, note }) {
   await p.click(tid('new-agent-btn'));
   // Wait for modal to appear (hidden attr removed)
   await p.waitForFunction(
     () => !document.querySelector('[data-testid="modal-overlay"]')?.hidden,
     { timeout: 3000 }
   );
+  if (provider) await p.select(tid('agent-provider-select'), provider);
   await p.type(tid('agent-name-input'), name);
   await p.type(tid('agent-dir-input'), workingDir);
   if (note) await p.type(tid('agent-note-input'), note);
