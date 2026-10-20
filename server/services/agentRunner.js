@@ -20,52 +20,6 @@ import { runTurn } from './agentProcessManager.js';
 import { getProvider } from './providers/index.js';
 import { t } from '../i18n/t.js';
 
-// Tool names whose permission_denials carry a real filesystem path
-// (tool_input.file_path) — these are the ones `extraAllowedPaths`/`--add-dir`
-// can actually authorize. Anything else (Bash, WebFetch, etc.) needs
-// allowedToolPatterns/`--allowedTools` instead — see the Agent typedef in
-// db.js for why the two grant mechanisms are kept separate.
-export const FILE_PATH_TOOLS = ['Write', 'Edit', 'Read', 'NotebookEdit'];
-
-/**
- * Derives the scoped `--allowedTools` pattern(s) to grant for a denied,
- * non-file-path tool call. Called server-side (handler.js's GRANT_PERMISSION
- * handler) on the same flattened "value" string the permission card already
- * displays — the client never needs to know about tool-pattern syntax.
- *
- * For Bash: acceptEdits denies a chained command (`a && b`, `a; b`, `a | b`)
- * outright as "multiple operations" — the denial's tool_input.command is the
- * FULL chained string, not just whichever sub-command actually needed
- * approval. Granting only a pattern derived from the first sub-command would
- * silently fail to unblock a later sub-command that isn't first in the chain
- * (this was caught by this feature's own regression test). So: split on
- * shell chaining operators and derive one pattern per sub-command, each as
- * its first two whitespace-separated tokens (e.g. "git add ..." -> "Bash(git
- * add:*)"), confirmed empirically against the real `claude` CLI (v2.1.220).
- * Two tokens rather than one keeps a grant from silently covering an entire
- * tool (granting "git add" must never also authorize "git push --force") —
- * granting every sub-command of a chain the user explicitly saw and approved
- * is correct, since that's exactly what the permission card displayed.
- *
- * For any other non-file tool (WebFetch, WebSearch, Task, ...), Claude Code's
- * permission patterns don't support this kind of sub-command scoping — the
- * bare tool name is the only granted form.
- * @param {string} toolName
- * @param {string} value - The denial's flattened display value (a Bash
- *   command string, or JSON.stringify(tool_input) for anything else)
- * @returns {string[]}
- */
-export function deriveToolPatterns(toolName, value) {
-  if (toolName !== 'Bash') return [toolName];
-  const subCommands = value.split(/&&|\|\||;|\|/).map((s) => s.trim()).filter(Boolean);
-  const patterns = subCommands.map((cmd) => {
-    const tokens = cmd.split(/\s+/).filter(Boolean);
-    const prefix = tokens.slice(0, 2).join(' ');
-    return prefix ? `Bash(${prefix}:*)` : 'Bash';
-  });
-  return [...new Set(patterns)];
-}
-
 /**
  * Narrows a turn's raw permission_denials down to genuinely distinct asks.
  * The model can retry a blocked Bash action more than once in the same turn
@@ -85,23 +39,29 @@ export function deriveToolPatterns(toolName, value) {
  * duplicates are still caught for every tool, matching the client's own
  * dedupe (buildPermissionCard) — this just adds the Bash-specific
  * subset case on top, since only the server knows CLI pattern syntax.
+ *
+ * Which tools have patterns worth comparing, and what they are, is the
+ * provider's call (AgentProvider.overlappingPatterns) — this only knows
+ * that a denial whose patterns are all already covered adds nothing.
  * @param {PermissionDenial[]} denials
+ * @param {import('./providers/index.js').AgentProvider} [provider] - The
+ *   provider of the agent these denials came from.
  * @returns {PermissionDenial[]}
  */
-export function dedupePermissionDenials(denials) {
+export function dedupePermissionDenials(denials, provider = getProvider()) {
   const kept = [];
   const seenExact = new Set();
-  const coveredBashPatterns = new Set();
+  const coveredPatterns = new Set();
 
   for (const denial of denials) {
     const value = String(denial.tool_input?.file_path ?? denial.tool_input?.command ?? JSON.stringify(denial.tool_input));
     const exactKey = `${denial.tool_name}::${value}`;
     if (seenExact.has(exactKey)) continue;
 
-    if (denial.tool_name === 'Bash') {
-      const patterns = deriveToolPatterns('Bash', value);
-      if (patterns.length && patterns.every((p) => coveredBashPatterns.has(p))) continue;
-      for (const p of patterns) coveredBashPatterns.add(p);
+    const patterns = provider.overlappingPatterns(denial.tool_name, value);
+    if (patterns) {
+      if (patterns.length && patterns.every((p) => coveredPatterns.has(p))) continue;
+      for (const p of patterns) coveredPatterns.add(p);
     }
 
     seenExact.add(exactKey);

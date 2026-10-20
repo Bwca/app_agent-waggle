@@ -53,6 +53,21 @@ import { DEFAULT_PROVIDER_ID } from '../../public/agentProviders.js';
  * @property {(text: string) => boolean} looksLikeAuthFailure - True when a
  *   finished turn's text means the process holds stale auth and should be
  *   respawned.
+ * @property {(toolName: string, value: string) => PermissionGrant} grantFor -
+ *   What granting one denied tool call (as the permission card shows it:
+ *   a path, a command, or a JSON dump of its input) should store on the
+ *   agent. A grant always respawns the agent's process, so a provider reads
+ *   the stored grants back at spawn time, as flags or however it applies them.
+ * @property {(toolName: string, value: string) => string[] | null} overlappingPatterns -
+ *   The patterns a denial would grant, for a tool whose grants can cover one
+ *   another's (see agentRunner.js's dedupePermissionDenials), or null.
+ */
+
+/**
+ * Exactly one of the two is set.
+ * @typedef {Object} PermissionGrant
+ * @property {string} [path] - A directory to add to agent.extraAllowedPaths.
+ * @property {string[]} [patterns] - Patterns to add to agent.allowedToolPatterns.
  */
 
 /**
