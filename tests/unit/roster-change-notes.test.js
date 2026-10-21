@@ -46,4 +46,18 @@ describe('roster-change notes', () => {
       '🚪 The user removed Ada [agent ada-1] from the chat',
     ]);
   });
+
+  test('name the agent that acted, when one did', async () => {
+    const ada = await db.createAgent({ id: 'ada-3', name: 'Ada', color: '#fff', workingDir: root });
+    const clarke = await db.createAgent({ id: 'clarke', name: 'Clarke', color: '#fff', workingDir: root });
+    const chat = await db.createChat({ id: 'by-agent', name: 'by-agent', memberAgentIds: [] });
+
+    await handler.postAgentAddedNote(chat, ada, clarke, wss);
+    await handler.postAgentRemovedNote(chat, ada, clarke, wss);
+
+    assert.deepEqual(db.getMessages(chat.id, 10).map((m) => m.content), [
+      '➕ Clarke [agent clarke] added Ada [agent ada-3] to the chat',
+      '🚪 Clarke [agent clarke] removed Ada [agent ada-3] from the chat',
+    ]);
+  });
 });

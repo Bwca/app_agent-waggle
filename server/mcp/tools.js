@@ -94,6 +94,25 @@ function crossChatConflictMessage(agentId, targetChatId) {
   return t('errors.agentAlreadyInChat', { name: agent?.name ?? agentId, chatName: busyChat?.name ?? '' });
 }
 
+/** Appended to each roster tool's description: what its asAgentId is for. */
+const AS_AGENT_HINT = ' Pass asAgentId when acting as one of Agentwaggle\'s agents, so the note this leaves in the chat names that agent instead of "An MCP client".';
+
+/**
+ * Who a roster tool's note names as having acted: the agent asAgentId
+ * gives, else just "an MCP client" (see RosterActor in ws/handler.js).
+ * Only the id is taken, never a name to show: names aren't unique, and a
+ * caller-supplied one could disagree with the id. Null when asAgentId names
+ * no agent, so the tool can fail before changing anything. Not limited to
+ * the chat's own members, unlike send_message's asAgentId: an agent
+ * organizing another chat is still the one who acted.
+ * @param {string | undefined} asAgentId
+ * @returns {import('../ws/handler.js').RosterActor | null}
+ */
+function rosterActor(asAgentId) {
+  if (!asAgentId) return 'mcp';
+  return getAgent(asAgentId) ?? null;
+}
+
 /**
  * Registers every Agentwaggle-as-tools MCP tool on `mcpServer`.
  * @param {import('@modelcontextprotocol/sdk/server/mcp.js').McpServer} mcpServer
@@ -223,10 +242,12 @@ export function registerTools(mcpServer, wss) {
   mcpServer.registerTool(
     'add_agent_to_chat',
     {
-      description: 'Add an existing agent to an existing chat.',
-      inputSchema: { chatId: z.string(), agentId: z.string() },
+      description: `Add an existing agent to an existing chat.${AS_AGENT_HINT}`,
+      inputSchema: { chatId: z.string(), agentId: z.string(), asAgentId: z.string().optional() },
     },
-    async ({ chatId, agentId }) => {
+    async ({ chatId, agentId, asAgentId }) => {
+      const actor = rosterActor(asAgentId);
+      if (!actor) return fail(t('errors.agentNotFound'));
       const conflict = crossChatConflictMessage(agentId, chatId);
       if (conflict) return fail(conflict);
       const chat = await addChatMember(chatId, agentId);
@@ -234,7 +255,7 @@ export function registerTools(mcpServer, wss) {
       const agent = getAgent(agentId);
       if (agent) spawnForAgent(agent);
       broadcast(wss, { type: 'CHAT_UPDATED', chat });
-      if (agent) await postAgentAddedNote(chat, agent, 'mcp', wss);
+      if (agent) await postAgentAddedNote(chat, agent, actor, wss);
       return ok(chat);
     }
   );
@@ -242,10 +263,12 @@ export function registerTools(mcpServer, wss) {
   mcpServer.registerTool(
     'remove_agent_from_chat',
     {
-      description: 'Remove an agent from a chat.',
-      inputSchema: { chatId: z.string(), agentId: z.string() },
+      description: `Remove an agent from a chat.${AS_AGENT_HINT}`,
+      inputSchema: { chatId: z.string(), agentId: z.string(), asAgentId: z.string().optional() },
     },
-    async ({ chatId, agentId }) => {
+    async ({ chatId, agentId, asAgentId }) => {
+      const actor = rosterActor(asAgentId);
+      if (!actor) return fail(t('errors.agentNotFound'));
       const wasMember = getChat(chatId)?.memberAgentIds.includes(agentId) ?? false;
       const chat = await removeChatMember(chatId, agentId);
       if (!chat) return fail(t('errors.chatNotFound'));
@@ -264,7 +287,7 @@ export function registerTools(mcpServer, wss) {
         const agent = getAgent(agentId);
         if (agent) {
           broadcast(wss, { type: 'AGENT_UPDATED', agent });
-          await postAgentRemovedNote(chat, agent, 'mcp', wss);
+          await postAgentRemovedNote(chat, agent, actor, wss);
         }
       }
       return ok(chat);
@@ -373,10 +396,12 @@ export function registerTools(mcpServer, wss) {
   mcpServer.registerTool(
     'delete_agent',
     {
-      description: 'Delete an agent and all its sessions.',
-      inputSchema: { agentId: z.string() },
+      description: `Delete an agent and all its sessions.${AS_AGENT_HINT}`,
+      inputSchema: { agentId: z.string(), asAgentId: z.string().optional() },
     },
-    async ({ agentId }) => {
+    async ({ agentId, asAgentId }) => {
+      const actor = rosterActor(asAgentId);
+      if (!actor) return fail(t('errors.agentNotFound'));
       const chatId = getAgentChatId(agentId);
       // Both captured before the delete, and the note posted before it too:
       // the agent row, name included, won't exist to read afterward, and
@@ -386,7 +411,7 @@ export function registerTools(mcpServer, wss) {
       // against an already-gone id).
       const agent = chatId ? getAgent(agentId) : null;
       const chatBeforeDelete = chatId ? getChat(chatId) : null;
-      if (chatBeforeDelete && agent) await postAgentRemovedNote(chatBeforeDelete, agent, 'mcp', wss);
+      if (chatBeforeDelete && agent) await postAgentRemovedNote(chatBeforeDelete, agent, actor, wss);
       const deleted = await deleteAgent(agentId);
       if (!deleted) return fail(t('errors.agentNotFound'));
       // Not awaited — same reasoning as remove_agent_from_chat above: this

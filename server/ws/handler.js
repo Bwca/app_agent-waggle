@@ -1270,8 +1270,10 @@ async function postCompactionNotes(chat, agent, compactions, wss) {
  * auth, so this is always the single local operator, see CLAUDE.md) or an
  * external Claude instance driving Agentwaggle over /mcp ('mcp' — see
  * mcp/tools.js). An MCP caller has no finer-grained identity than the
- * bearer token it connected with, so 'mcp' is as specific as this can get.
- * @typedef {'user' | 'mcp'} RosterActor
+ * bearer token it connected with, so 'mcp' is as specific as this can get
+ * unless it says which agent it's acting as (the roster tools' asAgentId),
+ * in which case it's that agent.
+ * @typedef {'user' | 'mcp' | import('../store/db.js').Agent} RosterActor
  */
 
 /**
@@ -1282,7 +1284,9 @@ async function postCompactionNotes(chat, agent, compactions, wss) {
  * @returns {string}
  */
 function rosterActorLabel(actor) {
-  return actor === 'mcp' ? 'An MCP client' : 'The user';
+  if (actor === 'user') return 'The user';
+  if (actor === 'mcp') return 'An MCP client';
+  return agentRef(actor);
 }
 
 /**
