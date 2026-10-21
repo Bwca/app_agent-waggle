@@ -13,7 +13,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const root = mkdtempSync(join(tmpdir(), 'clauhort-roster-notes-'));
+const root = mkdtempSync(join(tmpdir(), 'agentwaggle-roster-notes-'));
 process.env.APP_DB_FILE = ':memory:';
 process.env.APP_LOG_DIR = root;
 process.env.APP_LOG_LEVEL = 'silent';

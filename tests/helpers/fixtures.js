@@ -19,7 +19,7 @@ const createdDirs = new Set();
  */
 export function agentDir(label = 'agent') {
   const safeLabel = label.toLowerCase().replace(/[^a-z0-9-]+/g, '-');
-  const dir = mkdtempSync(join(tmpdir(), `clauhort-e2e-${safeLabel}-`));
+  const dir = mkdtempSync(join(tmpdir(), `agentwaggle-e2e-${safeLabel}-`));
   createdDirs.add(dir);
   return dir;
 }

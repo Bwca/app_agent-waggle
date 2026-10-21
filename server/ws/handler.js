@@ -1213,7 +1213,7 @@ async function postCompactionNotes(chat, agent, compactions, wss) {
  * chat, or deleted one outright) — the only two surfaces that can do any
  * of these are a REST call from the browser tab ('user' — the app has no
  * auth, so this is always the single local operator, see CLAUDE.md) or an
- * external Claude instance driving Clauhort over /mcp ('mcp' — see
+ * external Claude instance driving Agentwaggle over /mcp ('mcp' — see
  * mcp/tools.js). An MCP caller has no finer-grained identity than the
  * bearer token it connected with, so 'mcp' is as specific as this can get.
  * @typedef {'user' | 'mcp'} RosterActor

@@ -16,7 +16,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const logDir = mkdtempSync(join(tmpdir(), 'clauhort-lazy-'));
+const logDir = mkdtempSync(join(tmpdir(), 'agentwaggle-lazy-'));
 process.env.CLAUDE_BIN = fileURLToPath(new URL('./fixtures/fake-claude.js', import.meta.url));
 process.env.FAKE_CLAUDE_REPLY_DELAY_MS = '200';
 process.env.APP_LOG_DIR = logDir;

@@ -21,7 +21,7 @@ let originalTranscriptEnv;
 let originalLogDirEnv;
 
 beforeEach(() => {
-  logDir = mkdtempSync(join(tmpdir(), 'clauhort-transcript-test-'));
+  logDir = mkdtempSync(join(tmpdir(), 'agentwaggle-transcript-test-'));
   originalTranscriptEnv = process.env.APP_TRANSCRIPT_LOG;
   originalLogDirEnv = process.env.APP_LOG_DIR;
   process.env.APP_LOG_DIR = logDir;

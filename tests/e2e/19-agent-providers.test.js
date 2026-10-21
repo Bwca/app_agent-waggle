@@ -204,7 +204,7 @@ describe('Picking an opencode model from its list', () => {
   /** @type {import('puppeteer').Page} */
   let page;
   /** Holds the fake opencode, which lists two models, plus one more in a project with its own opencode.json. */
-  const binDir = mkdtempSync(join(tmpdir(), 'clauhort-e2e-fake-opencode-'));
+  const binDir = mkdtempSync(join(tmpdir(), 'agentwaggle-e2e-fake-opencode-'));
 
   before(async () => {
     const bin = join(binDir, 'opencode');

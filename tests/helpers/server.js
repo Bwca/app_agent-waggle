@@ -1,5 +1,5 @@
 /**
- * @fileoverview Helpers to start/stop the Clauhort server for E2E tests.
+ * @fileoverview Helpers to start/stop the Agentwaggle server for E2E tests.
  */
 
 import { spawn } from 'child_process';

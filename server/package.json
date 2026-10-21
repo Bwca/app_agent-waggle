@@ -1,5 +1,5 @@
 {
-  "name": "clauhort-server",
+  "name": "agentwaggle-server",
   "version": "1.2.51",
   "description": "Multi-agent Claude chat server",
   "type": "module",

@@ -18,7 +18,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const root = mkdtempSync(join(tmpdir(), 'clauhort-grant-'));
+const root = mkdtempSync(join(tmpdir(), 'agentwaggle-grant-'));
 const argsDir = join(root, 'args');
 mkdirSync(argsDir);
 process.env.CLAUDE_BIN = fileURLToPath(new URL('./fixtures/fake-claude.js', import.meta.url));
