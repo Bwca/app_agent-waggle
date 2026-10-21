@@ -36,6 +36,12 @@ import { DEFAULT_PROVIDER_ID } from '../../public/agentProviders.js';
  *   providers it can offer (see agentRunner.js's verifyProviderAvailable).
  *   Gets the agent-to-be when there is one, for a provider that resolves its
  *   binary per project, and says where the binary it chose came from.
+ * @property {(agent?: { workingDir?: string }) => { command: string, args: string[] }} [modelsCommand] -
+ *   Lists the model IDs an agent of this provider could run, one per line
+ *   on stdout, run in the agent-to-be's working directory since a project
+ *   can configure its own models (see agentRunner.js's listProviderModels).
+ *   For the model picker of a provider with no aliases of its own; one
+ *   without it only takes a typed model ID.
  * @property {(state: object, content: import('../agentRunner.js').ContentBlock[]) => void | Promise<void>} startTurn -
  *   Writes whatever starts one turn to the process, through the `write` the
  *   state was created with. A provider whose protocol needs a handshake

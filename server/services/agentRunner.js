@@ -212,3 +212,57 @@ export async function verifyProviderAvailable(provider = getProvider(), agent = 
     });
   });
 }
+
+/** How long a provider gets to list its models before the picker gives up on it. */
+const LIST_MODELS_TIMEOUT_MS = 20_000;
+
+/**
+ * Lists the model IDs a provider can run, via its modelsCommand, in the
+ * agent-to-be's working directory (a project can configure its own
+ * models). No model call. For the model picker only: a model typed by hand
+ * is still accepted, so a failure here just means no list to pick from.
+ *
+ * @param {import('./providers/index.js').AgentProvider} provider
+ * @param {{ workingDir?: string }} [agent]
+ * @returns {Promise<{ ok: true, models: string[] } | { ok: false, error: string }>}
+ *   `ok: false` too for a provider with no modelsCommand.
+ */
+export async function listProviderModels(provider, agent = undefined) {
+  if (!provider.modelsCommand) return { ok: false, error: `${provider.displayName} has no model list` };
+  const { command, args } = provider.modelsCommand(agent);
+  return new Promise((resolve) => {
+    const child = spawn(command, args, {
+      cwd: agent?.workingDir,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: LIST_MODELS_TIMEOUT_MS,
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf-8');
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.setEncoding('utf-8');
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+
+    child.on('error', (err) => {
+      resolve({ ok: false, error: t('errors.agentSpawnFailed', { provider: provider.displayName, message: err.message }) });
+    });
+    child.on('close', (code) => {
+      if (code !== 0) {
+        resolve({ ok: false, error: stderr.trim() || t('errors.agentExitCode', { provider: provider.displayName, code }) });
+        return;
+      }
+      resolve({ ok: true, models: parseModelList(stdout) });
+    });
+  });
+}
+
+/**
+ * One model ID per line; anything with whitespace in it is a stray message,
+ * not an ID.
+ * @param {string} stdout
+ * @returns {string[]} Deduplicated, in the CLI's own order.
+ */
+export function parseModelList(stdout) {
+  const lines = stdout.split('\n').map((line) => line.trim()).filter((line) => line && !/\s/.test(line));
+  return [...new Set(lines)];
+}

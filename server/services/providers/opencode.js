@@ -597,6 +597,7 @@ export const opencodeProvider = {
     const { command, source } = locateBin(agent?.workingDir);
     return { command, args: ['--version'], source };
   },
+  modelsCommand: (agent) => ({ command: resolveBin(agent?.workingDir), args: ['models'] }),
   startTurn,
   parseLine,
   createProcessState,

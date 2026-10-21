@@ -40,6 +40,11 @@ describe('opencode provider', () => {
     assert.deepEqual(args, ['acp']);
   });
 
+  test('lists its models with `opencode models`', () => {
+    const { args } = opencodeProvider.modelsCommand(AGENT);
+    assert.deepEqual(args, ['models']);
+  });
+
   test('handshakes on the first turn, then prompts the new session', async () => {
     const { state, sent, receive } = connect();
     const started = opencodeProvider.startTurn(state, [{ type: 'text', text: 'hi' }]);
