@@ -204,6 +204,14 @@ export function getProvider(id = DEFAULT_PROVIDER_ID) {
 }
 
 /**
+ * Every registered provider, the default first.
+ * @returns {AgentProvider[]}
+ */
+export function listProviders() {
+  return [...providers.values()];
+}
+
+/**
  * @param {string} id
  * @returns {boolean}
  */
