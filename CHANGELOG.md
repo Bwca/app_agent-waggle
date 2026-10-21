@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Clauhort are documented in this file.
+All notable changes to Agentwaggle (formerly Clauhort) are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - A browser refresh (or first page load) while an agent was mid-turn used to show nothing at all until the turn finished — indistinguishable from the request having silently gone nowhere, especially for a turn doing background/subagent work with no text on screen yet. The server now keeps a live snapshot of every in-flight stream (accumulated text, last status, start time) and sends it to each newly-connected client as a new `AGENT_STREAM_SNAPSHOT` event, which reconstructs the exact same streaming bubble a client that stayed connected would have. See `buildActiveStreamSnapshot` in `server/ws/handler.js` and `onStreamSnapshot` in `server/public/app.js`.
 
 ### Changed
+- Clauhort is now **Agentwaggle**. The old name was Claude + cohort, a swarm of Claudes, which stopped fitting once agents could run as opencode too; the new one is agent + waggle, the dance bees use to tell each other where to go, as agents here do with `@mentions`. Nothing needs doing to upgrade: the database, settings and agents carry over, and an MCP server registered as `clauhort` keeps working. The README's setup command now registers it as `agentwaggle`, and agents are kept away from its `send_message` tool under both names (and `APP_MCP_SERVER_NAME`, if set), so an existing registration doesn't quietly hand them the tool back. See "Upgrading from Clauhort" in the README.
 - Everything a CLI does differently now sits behind its provider: how a turn starts (including a protocol handshake), what a permission grant authorizes, where project slash commands live, and what the UI shows for it. Agents have a stored `provider`; existing agents are Claude. See `AgentProvider` in `server/services/providers/index.js` and `ProviderDisplay` in `server/public/agentProviders.js`.
 
 ### Fixed
