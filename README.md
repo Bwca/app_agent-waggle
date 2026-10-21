@@ -2,13 +2,13 @@
 
 A multi-agent chat app for coding agents. Each participant in a conversation is a real agent CLI (Claude Code, or opencode) running in its own working directory — think MS Teams, but the participants are AI agents.
 
-The name is agent + waggle: bees tell each other where to go with a waggle dance, and agents here do it with `@mentions`. It was called Agentwaggle (Claude + cohort) until it stopped being Claude-only — see [Upgrading from Agentwaggle](#upgrading-from-clauhort).
+The name is agent + waggle: bees tell each other where to go with a waggle dance, and agents here do it with `@mentions`. It was called Clauhort (Claude + cohort) until it stopped being Claude-only — see [Upgrading from Clauhort](#upgrading-from-clauhort).
 
 ## How it works
 
 - Create named agents, each with its own working directory and color
 - Give an agent a note (optional, at creation or any time after via 🗒 in the panel) — a purely personal reminder of why it exists, so a long-running or multi-day chat doesn't leave you wondering what a given agent was for
-- Group multiple agents into a chat — but each agent belongs to only one chat at a time; remove it from a chat to free it up for another (this also resets its Claude session, so it starts fresh with no memory of the old chat)
+- Group multiple agents into a chat — but each agent belongs to only one chat at a time; remove it from a chat to free it up for another (this also resets its CLI session, so it starts fresh with no memory of the old chat)
 - Rename a chat any time via the ✏️ button in the sidebar
 - Group chats into categories via the 🏷️ button — pick an existing one from the popover with a single click (no retyping a name that already exists), clear it back to Uncategorized, or add a new one; each category becomes a collapsible section in the sidebar
 - Send messages; agents respond in parallel with streaming output, showing a live status of what they're doing (reading a file, running a command, etc.) and how long they've been at it
@@ -41,14 +41,15 @@ The name is agent + waggle: bees tell each other where to go with a waggle dance
 - **Backend**: Node.js + Express + `ws` (WebSocket)
 - **Frontend**: Plain HTML/CSS/JS (ES modules, no build step)
 - **Persistence**: SQLite via Node's built-in `node:sqlite`, at `server/store/data.sqlite3` (auto-created, gitignored) — no native compile step, so no build toolchain (Visual Studio, Xcode CLT, build-essential) required on any platform
-- **Agent execution**: Claude Code CLI (`claude --print --input-format=stream-json --output-format=stream-json`)
+- **Agent execution**: one persistent CLI process per agent: Claude Code (`claude --print --input-format=stream-json --output-format=stream-json`) or opencode (`opencode acp`)
 - **i18n**: `server/public/i18n/` — a small dictionary + lookup engine shared unmodified between the browser and the server
 
 ## Requirements
 
 - Node.js 22.13+ (needed for `node:sqlite` without a flag; project pins v22.13.0 via nvm — see `.nvmrc`)
-- [Claude Code CLI](https://claude.ai/code) installed and authenticated, available on `PATH` as `claude`
-- Optional: [opencode](https://opencode.ai) 1.19+ for opencode agents. Looked for, first match wins: `OPENCODE_BIN`, the agent's own project (`node_modules/.bin/opencode`, as `npm i -D opencode-ai` installs it), `PATH`, then `~/.opencode/bin/opencode` (where its install script puts it). The New Agent form only offers opencode once one of these is found — for a project-pinned copy, once that project is the working directory — and says which one it will use. Its model and agent setup come from that project's own `opencode.json`
+- At least one agent CLI, installed and authenticated:
+  - [Claude Code CLI](https://claude.ai/code) for Claude Code agents, available on `PATH` as `claude`
+  - [opencode](https://opencode.ai) 1.19+ for opencode agents. Looked for, first match wins: `OPENCODE_BIN`, the agent's own project (`node_modules/.bin/opencode`, as `npm i -D opencode-ai` installs it), `PATH`, then `~/.opencode/bin/opencode` (where its install script puts it). The New Agent form only offers opencode once one of these is found — for a project-pinned copy, once that project is the working directory — and says which one it will use. Its model and agent setup come from that project's own `opencode.json`
 - Linux, macOS, or Windows — developed and tested on Linux; Windows-specific path/spawn handling has been audited but not run on an actual Windows machine, so treat it as "should work," not battle-tested
 
 ## Setup
@@ -129,7 +130,7 @@ claude mcp add --transport http agentwaggle "http://127.0.0.1:3001/mcp?token=<to
 
 Connect from **Claude Desktop**: Settings → Connectors → Add custom connector, and paste `http://127.0.0.1:3001/mcp?token=<token>` as the URL (its connector setup has no separate header field, hence the token in the URL itself). Both assume Claude runs on the same machine as the server — this never becomes reachable over the network any more than the rest of the app does.
 
-### Upgrading from Agentwaggle
+### Upgrading from Clauhort
 
 Nothing needs doing. Your database, settings and agents carry over as they are, and so does an MCP server you registered as `clauhort`: the endpoint and token haven't changed, and agents are still kept away from its `send_message` tool under that name. Its tools just keep the `mcp__clauhort__` prefix. To use the new name instead:
 
@@ -160,10 +161,10 @@ Agentwaggle is provided "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIE
 
 Without limiting the above:
 
-- **Agentwaggle itself doesn't read, write, or execute anything on your system.** Every agent is the real `claude` CLI — Anthropic's own tool, which you install and authenticate yourself, independently of Agentwaggle — and every file edit, shell command, or browser action is carried out by that CLI process under its own permission model, including, if you enable YOLO mode, with its permission checks skipped, and, if you grant browser access, real control of your Chrome browser. Agentwaggle's own code only launches that process, relays your messages to it, and displays what it reports back — including its permission prompts, which you still review and approve yourself before anything runs. You are solely responsible for what you authorize the CLI to do, and for anything it does as a result, including but not limited to modifying or deleting files, running commands, incurring costs, or taking actions in your browser.
-- **No guarantee of correctness, security, or availability.** This software (Agentwaggle's own code, not the `claude` CLI it launches) may contain bugs, may behave unpredictably, and may stop working without notice. Back up anything you can't afford to lose before pointing an agent at it.
-- **Third-party costs and services are not our responsibility.** Agentwaggle orchestrates the Anthropic `claude` CLI against your own Anthropic account. Any usage charges, rate limits, outages, or changes to that service are strictly between you and Anthropic.
-- **Not affiliated with Anthropic.** Agentwaggle is an independent, community project — not affiliated with, endorsed by, or sponsored by Anthropic, PBC. "Claude" and "Claude Code" are trademarks of Anthropic, referenced here solely to describe compatibility.
+- **Agentwaggle itself doesn't read, write, or execute anything on your system.** Every agent is a real coding-agent CLI (`claude` or `opencode`), which you install and authenticate yourself, independently of Agentwaggle — and every file edit, shell command, or browser action is carried out by that CLI process under its own permission model, including, if you enable YOLO mode, with its permission checks skipped, and, if you grant browser access, real control of your Chrome browser. Agentwaggle's own code only launches that process, relays your messages to it, and displays what it reports back — including its permission prompts, which you still review and approve yourself before anything runs. You are solely responsible for what you authorize the CLI to do, and for anything it does as a result, including but not limited to modifying or deleting files, running commands, incurring costs, or taking actions in your browser.
+- **No guarantee of correctness, security, or availability.** This software (Agentwaggle's own code, not the CLIs it launches) may contain bugs, may behave unpredictably, and may stop working without notice. Back up anything you can't afford to lose before pointing an agent at it.
+- **Third-party costs and services are not our responsibility.** Agentwaggle orchestrates CLIs (Anthropic's `claude`, `opencode`) against your own accounts with them and with whatever model providers they use. Any usage charges, rate limits, outages, or changes to those services are strictly between you and their providers.
+- **Not affiliated with Anthropic or opencode.** Agentwaggle is an independent, community project — not affiliated with, endorsed by, or sponsored by Anthropic, PBC, or the opencode project. "Claude" and "Claude Code" are trademarks of Anthropic, referenced here solely to describe compatibility.
 - **You use this software entirely at your own risk.** By using it, you agree to indemnify and hold harmless the authors and contributors from any claim, liability, loss, or expense (including legal fees) arising out of or related to your use of it.
 
 This is a plain-language summary for users, not a substitute for legal advice.
