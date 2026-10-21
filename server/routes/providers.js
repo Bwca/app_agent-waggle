@@ -6,8 +6,8 @@
 
 import { Router } from 'express';
 import { existsSync } from 'fs';
-import { listProviders } from '../services/providers/index.js';
-import { verifyProviderAvailable } from '../services/agentRunner.js';
+import { getProvider, hasProvider, listProviders } from '../services/providers/index.js';
+import { listProviderModels, verifyProviderAvailable } from '../services/agentRunner.js';
 
 const router = Router();
 
@@ -31,9 +31,7 @@ const router = Router();
  * @returns {ProviderAvailability[]} In registry order.
  */
 router.get('/', async (req, res) => {
-  const workingDir = typeof req.query.workingDir === 'string' && existsSync(req.query.workingDir)
-    ? req.query.workingDir
-    : undefined;
+  const workingDir = existingDir(req.query.workingDir);
   const results = await Promise.all(listProviders().map(async (provider) => {
     const result = await verifyProviderAvailable(provider, workingDir ? { workingDir } : undefined);
     return result.ok
@@ -42,5 +40,31 @@ router.get('/', async (req, res) => {
   }));
   res.json(results);
 });
+
+/**
+ * GET /api/providers/:id/models?workingDir=<path>
+ * The model IDs that provider can run, for the model picker (see
+ * listProviderModels). `workingDir` as for GET /api/providers, since a
+ * project can configure its own models.
+ * @returns {{ models: string[] }} 404 for an unknown provider or one with no
+ *   model list, 502 when listing failed.
+ */
+router.get('/:id/models', async (req, res) => {
+  if (!hasProvider(req.params.id)) return res.status(404).json({ error: `Unknown agent provider: ${req.params.id}` });
+  const provider = getProvider(req.params.id);
+  if (!provider.modelsCommand) return res.status(404).json({ error: `${provider.displayName} has no model list` });
+  const workingDir = existingDir(req.query.workingDir);
+  const result = await listProviderModels(provider, workingDir ? { workingDir } : undefined);
+  if (!result.ok) return res.status(502).json({ error: result.error });
+  res.json({ models: result.models });
+});
+
+/**
+ * @param {unknown} value - A `workingDir` query parameter.
+ * @returns {string | undefined} It, if it names a path that exists.
+ */
+function existingDir(value) {
+  return typeof value === 'string' && existsSync(value) ? value : undefined;
+}
 
 export default router;
