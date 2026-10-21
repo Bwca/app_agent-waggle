@@ -13,7 +13,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const root = mkdtempSync(join(tmpdir(), 'clauhort-roster-notes-'));
+const root = mkdtempSync(join(tmpdir(), 'agentwaggle-roster-notes-'));
 process.env.APP_DB_FILE = ':memory:';
 process.env.APP_LOG_DIR = root;
 process.env.APP_LOG_LEVEL = 'silent';
@@ -41,9 +41,23 @@ describe('roster-change notes', () => {
     await handler.postAgentRemovedNote(chat, first, 'user', wss);
 
     assert.deepEqual(db.getMessages(chat.id, 10).map((m) => m.content), [
-      '➕ You added Ada [agent ada-1] to the chat',
+      '➕ The user added Ada [agent ada-1] to the chat',
       '➕ An MCP client added Ada [agent ada-2] to the chat',
-      '🚪 You removed Ada [agent ada-1] from the chat',
+      '🚪 The user removed Ada [agent ada-1] from the chat',
+    ]);
+  });
+
+  test('name the agent that acted, when one did', async () => {
+    const ada = await db.createAgent({ id: 'ada-3', name: 'Ada', color: '#fff', workingDir: root });
+    const clarke = await db.createAgent({ id: 'clarke', name: 'Clarke', color: '#fff', workingDir: root });
+    const chat = await db.createChat({ id: 'by-agent', name: 'by-agent', memberAgentIds: [] });
+
+    await handler.postAgentAddedNote(chat, ada, clarke, wss);
+    await handler.postAgentRemovedNote(chat, ada, clarke, wss);
+
+    assert.deepEqual(db.getMessages(chat.id, 10).map((m) => m.content), [
+      '➕ Clarke [agent clarke] added Ada [agent ada-3] to the chat',
+      '🚪 Clarke [agent clarke] removed Ada [agent ada-3] from the chat',
     ]);
   });
 });

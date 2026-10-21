@@ -222,4 +222,27 @@ describe('MCP mutations broadcast live to connected browser clients', () => {
 
     await client.close();
   });
+
+  test('a roster tool given asAgentId names that agent in the chat\'s note, and an unknown one changes nothing', async () => {
+    await resetData();
+    const client = await connectClient();
+    const { parsed: organizer } = await callTool(client, 'create_agent', { name: 'Organizer', color: '#336699', workingDir: process.cwd() });
+    const { parsed: newcomer } = await callTool(client, 'create_agent', { name: 'Newcomer', color: '#996633', workingDir: process.cwd() });
+    const { parsed: chat } = await callTool(client, 'create_chat', { name: 'Roster Chat', memberAgentIds: [organizer.id] });
+
+    const unknown = await callTool(client, 'add_agent_to_chat', { chatId: chat.id, agentId: newcomer.id, asAgentId: 'no-such-agent' });
+    assert.equal(unknown.result.isError, true);
+    const { parsed: unchanged } = await callTool(client, 'get_chat', { chatId: chat.id });
+    assert.deepEqual(unchanged.chat.memberAgentIds, [organizer.id]);
+
+    await callTool(client, 'add_agent_to_chat', { chatId: chat.id, agentId: newcomer.id, asAgentId: organizer.id });
+    await callTool(client, 'remove_agent_from_chat', { chatId: chat.id, agentId: newcomer.id, asAgentId: organizer.id });
+    const { parsed: after } = await callTool(client, 'get_chat', { chatId: chat.id });
+    assert.deepEqual(after.messages.map((m) => m.content), [
+      `➕ Organizer [agent ${organizer.id}] added Newcomer [agent ${newcomer.id}] to the chat`,
+      `🚪 Organizer [agent ${organizer.id}] removed Newcomer [agent ${newcomer.id}] from the chat`,
+    ]);
+
+    await client.close();
+  });
 });

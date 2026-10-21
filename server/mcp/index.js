@@ -1,7 +1,7 @@
 /**
  * @fileoverview Mounts the MCP server (see mcp/server.js/tools.js) onto the
  * main Express app at /mcp — lets an external Claude instance (Claude Code
- * or Claude Desktop, both running on this same machine) drive Clauhort
+ * or Claude Desktop, both running on this same machine) drive Agentwaggle
  * itself: create/manage chats and agents, send a message and get the
  * replies back. Off by default — see isMcpEnabled.
  */

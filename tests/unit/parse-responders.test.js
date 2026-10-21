@@ -103,7 +103,7 @@ describe('parseSkillInvocation — hyphenated names', () => {
   // parseSkillInvocation checks a real registered command via a filesystem
   // read (listAgentCommands), so these need an actual .claude/commands/*.md
   // fixture rather than a fully mocked agent.
-  const workDir = mkdtempSync(join(tmpdir(), 'clauhort-skill-test-'));
+  const workDir = mkdtempSync(join(tmpdir(), 'agentwaggle-skill-test-'));
   mkdirSync(join(workDir, '.claude', 'commands'), { recursive: true });
   writeFileSync(join(workDir, '.claude', 'commands', 'ping.md'), '---\ndescription: test\n---\npong');
   after(() => rmSync(workDir, { recursive: true, force: true }));
@@ -127,7 +127,7 @@ describe('parseSkillInvocation — ALLOWED_BUILTIN_COMMANDS carve-out', () => {
   // getAgentSkills returns []) — /compact and /clear still resolve via
   // ALLOWED_BUILTIN_COMMANDS, unlike an arbitrary unregistered CLI built-in
   // such as /help.
-  const workDir = mkdtempSync(join(tmpdir(), 'clauhort-compact-test-'));
+  const workDir = mkdtempSync(join(tmpdir(), 'agentwaggle-compact-test-'));
   after(() => rmSync(workDir, { recursive: true, force: true }));
 
   test('/compact is recognized as a skill invocation despite not being a project command or reported skill', () => {

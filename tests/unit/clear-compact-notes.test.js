@@ -17,7 +17,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const root = mkdtempSync(join(tmpdir(), 'clauhort-clear-compact-'));
+const root = mkdtempSync(join(tmpdir(), 'agentwaggle-clear-compact-'));
 process.env.CLAUDE_BIN = fileURLToPath(new URL('./fixtures/fake-claude.js', import.meta.url));
 process.env.APP_DB_FILE = ':memory:';
 process.env.APP_LOG_DIR = root;

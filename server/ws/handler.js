@@ -5,7 +5,7 @@
 
 import { WebSocket, WebSocketServer } from 'ws';
 import { v4 as uuidv4 } from 'uuid';
-import { getChat, getAgent, getAgentChatId, getMessages, addMessage, grantAgentPath, grantAgentToolPattern, setAgentResumeIdIfUnset, recordContextClear, setAgentModel, setAgentSeenUntil, setAgentUsage, setAgentSessionLimitReset, getUserDisplayName, createScheduledMessage, getScheduledMessages } from '../store/db.js';
+import { getChat, getAgent, getAgentChatId, getMessages, getLastAgentTurn, addMessage, grantAgentPath, grantAgentToolPattern, setAgentResumeIdIfUnset, recordContextClear, setAgentModel, setAgentSeenUntil, setAgentUsage, setAgentSessionLimitReset, getUserDisplayName, createScheduledMessage, getScheduledMessages } from '../store/db.js';
 import { parseResponders, extractMentionedAgents, parseSkillInvocation } from '../services/messageRouter.js';
 import { runAgentStream, dedupePermissionDenials } from '../services/agentRunner.js';
 import { providerForAgent } from '../services/providers/index.js';
@@ -445,12 +445,27 @@ function agentRef(agent) {
  * teammate's name included. So it says whether the author is the user or an
  * agent, and which agent by id (the same id the roster gives — see
  * formatRoster).
- * @param {Pick<import('../store/db.js').Message, 'role' | 'agentId' | 'authorName'>} m
+ * @param {Pick<import('../store/db.js').Message, 'role' | 'agentId' | 'authorName' | 'isSystemNote'>} m
  * @returns {string}
  */
 function authorLabel(m) {
   if (m.role === 'user') return `${m.authorName} [user]`;
+  // A roster note's agentId is the agent it's about, not its author. Labelled
+  // with it, "System [agent <Opaline's id>]" read as Opaline speaking.
+  if (isRosterNote(m)) return m.authorName;
   return m.agentId ? agentRef({ name: m.authorName, id: m.agentId }) : m.authorName;
+}
+
+/**
+ * Whether `m` records an agent being added to or removed from the chat
+ * (postAgentAddedNote/postAgentRemovedNote, the only notes authored as
+ * "System"). Unlike the other system notes, which are about one agent's
+ * own session, it's news to every agent in the chat.
+ * @param {Pick<import('../store/db.js').Message, 'authorName' | 'isSystemNote'>} m
+ * @returns {boolean}
+ */
+function isRosterNote(m) {
+  return Boolean(m.isSystemNote) && m.authorName === 'System';
 }
 
 /**
@@ -514,7 +529,7 @@ export function catchUpMessagesFor(agent, messages) {
   // built may or may not have made it in. Re-sending it costs a line;
   // dropping it loses it.
   if (seenUntil && (!agent.contextResetAt || seenUntil > agent.contextResetAt)) {
-    return messages.filter((m) => m.createdAt >= seenUntil && m.agentId !== agent.id && !m.isSystemNote);
+    return messages.filter((m) => m.createdAt >= seenUntil && isCatchUpContent(agent, m));
   }
 
   let lastOwnIdx = -1;
@@ -531,9 +546,49 @@ export function catchUpMessagesFor(agent, messages) {
       && (!agent.contextResetAt || messages[i].createdAt > agent.contextResetAt)
     ) { lastOwnIdx = i; break; }
   }
-  // isSystemNote messages are never catch-up content for anyone — they're a
-  // UI-only aside about one agent, not information another agent needs.
-  return messages.slice(lastOwnIdx + 1).filter((m) => m.agentId !== agent.id && !m.isSystemNote);
+  return messages.slice(lastOwnIdx + 1).filter((m) => isCatchUpContent(agent, m));
+}
+
+/**
+ * Whether a message past an agent's catch-up boundary goes to it: anything
+ * but its own replies (already in its session) and system notes, which are
+ * a UI-only aside about one agent's session. Roster notes are the
+ * exception, since who joined or left is news to everyone. Reported live:
+ * without them, an agent read "@Oona you're alive?" with no sign of who
+ * Oona was, and only learned of a newcomer from the roster block.
+ * @param {import('../store/db.js').Agent} agent
+ * @param {import('../store/db.js').Message} m
+ * @returns {boolean}
+ */
+function isCatchUpContent(agent, m) {
+  if (isRosterNote(m)) return true;
+  return m.agentId !== agent.id && !m.isSystemNote;
+}
+
+/**
+ * The history a turn's prompt is built from (see buildPromptBlocks).
+ *
+ * `recent` is the recent messages. An observer needs far more than the
+ * normal 20 — see OBSERVER_HISTORY_LIMIT's docs. Normal worker agents
+ * already have their own session memory via --resume, so re-sending more
+ * than the recent window would be pure duplication for them (same
+ * reasoning catchUpMessagesFor's own docs give).
+ *
+ * `priorMessages` is `recent` plus the agent's own last turn when that
+ * has scrolled out of it, which buildPromptBlocks needs to tell an agent
+ * that has spoken here from a newcomer. Reported live: an agent whose only
+ * reply was 21 messages back (a failed turn in between left no reply) got
+ * the full "You are being added to a chat" preamble again, and took it to
+ * mean it had been re-added to a new lineup.
+ * @param {string} chatId
+ * @param {import('../store/db.js').Agent} agent
+ * @returns {{ recent: import('../store/db.js').Message[], priorMessages: import('../store/db.js').Message[] }}
+ */
+export function promptHistoryFor(chatId, agent) {
+  const recent = getMessages(chatId, agent.isObserver ? OBSERVER_HISTORY_LIMIT : 20);
+  const lastTurn = getLastAgentTurn(chatId, agent.id);
+  const priorMessages = lastTurn && !recent.some((m) => m.id === lastTurn.id) ? [lastTurn, ...recent] : recent;
+  return { recent, priorMessages };
 }
 
 /**
@@ -1213,11 +1268,26 @@ async function postCompactionNotes(chat, agent, compactions, wss) {
  * chat, or deleted one outright) — the only two surfaces that can do any
  * of these are a REST call from the browser tab ('user' — the app has no
  * auth, so this is always the single local operator, see CLAUDE.md) or an
- * external Claude instance driving Clauhort over /mcp ('mcp' — see
+ * external Claude instance driving Agentwaggle over /mcp ('mcp' — see
  * mcp/tools.js). An MCP caller has no finer-grained identity than the
- * bearer token it connected with, so 'mcp' is as specific as this can get.
- * @typedef {'user' | 'mcp'} RosterActor
+ * bearer token it connected with, so 'mcp' is as specific as this can get
+ * unless it says which agent it's acting as (the roster tools' asAgentId),
+ * in which case it's that agent.
+ * @typedef {'user' | 'mcp' | import('../store/db.js').Agent} RosterActor
  */
+
+/**
+ * How a roster note names who acted. Not "You": the notes go out to agents
+ * as catch-up too (see isCatchUpContent), and to an agent "You added Ada"
+ * read as the agent itself having done it.
+ * @param {RosterActor} actor
+ * @returns {string}
+ */
+function rosterActorLabel(actor) {
+  if (actor === 'user') return 'The user';
+  if (actor === 'mcp') return 'An MCP client';
+  return agentRef(actor);
+}
 
 /**
  * Persists and broadcasts one isSystemNote message recording that `agent`
@@ -1234,7 +1304,7 @@ async function postCompactionNotes(chat, agent, compactions, wss) {
  * @returns {Promise<void>}
  */
 export async function postAgentRemovedNote(chat, agent, actor, wss) {
-  const actorLabel = actor === 'mcp' ? 'An MCP client' : 'You';
+  const actorLabel = rosterActorLabel(actor);
   /** @type {import('../store/db.js').Message} */
   const noteMessage = {
     id: uuidv4(),
@@ -1272,7 +1342,7 @@ export async function postAgentRemovedNote(chat, agent, actor, wss) {
  * @returns {Promise<void>}
  */
 export async function postAgentAddedNote(chat, agent, actor, wss) {
-  const actorLabel = actor === 'mcp' ? 'An MCP client' : 'You';
+  const actorLabel = rosterActorLabel(actor);
   /** @type {import('../store/db.js').Message} */
   const noteMessage = {
     id: uuidv4(),
@@ -1418,15 +1488,10 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, exc
       const freshAgent = getAgent(agent.id) ?? agent;
       const freshChat = getChat(chat.id) ?? chat;
       const freshMembers = freshChat.memberAgentIds.map((id) => getAgent(id)).filter(Boolean);
-      // An observer needs far more than the normal 20-message catch-up
-      // window — see OBSERVER_HISTORY_LIMIT's docs. Normal worker agents
-      // already have their own session memory via --resume, so re-sending
-      // more than the recent window would be pure duplication for them
-      // (same reasoning catchUpMessagesFor's own docs give).
-      const priorMessages = getMessages(chat.id, freshAgent.isObserver ? OBSERVER_HISTORY_LIMIT : 20);
+      const { recent, priorMessages } = promptHistoryFor(chat.id, freshAgent);
       promptBuiltAt = new Date().toISOString();
       const { message, excludeMessageId: triggerId } = pending.trigger;
-      shownTurn = { messageIds: new Set([...priorMessages.map((m) => m.id), triggerId]), reply: pending.reply, done: false };
+      shownTurn = { messageIds: new Set([...recent.map((m) => m.id), triggerId]), reply: pending.reply, done: false };
       shownTurns.set(pendingKey, shownTurn);
       const content = buildPromptBlocks(freshAgent, freshChat, freshMembers, message, priorMessages, triggerId, pending.foldedMessageIds);
       logTranscript({ chatId: chat.id, agentId: agent.id, agentName: agent.name, streamId, direction: 'SENT', content });

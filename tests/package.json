@@ -1,13 +1,14 @@
 {
-  "name": "clauhort-tests",
+  "name": "agentwaggle-tests",
   "version": "1.0.0",
-  "description": "Puppeteer E2E tests for Clauhort",
+  "description": "Puppeteer E2E tests for Agentwaggle",
   "type": "module",
   "scripts": {
     "test": "node run.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.31.0",
+    "@rrweb/record": "2.1.4",
     "puppeteer": "24.43.1"
   },
   "allowScripts": {

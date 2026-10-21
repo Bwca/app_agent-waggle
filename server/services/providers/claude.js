@@ -38,12 +38,14 @@ const CLAUDE_BIN = process.env.CLAUDE_BIN || 'claude';
 export const AUTOCOMPACT_WINDOW = process.env.APP_AUTOCOMPACT || '200k';
 
 /**
- * The name this app's own MCP server (server/mcp/) is registered under in
- * the user's Claude config — `clauhort` in the README's setup command.
- * Overridable via APP_MCP_SERVER_NAME for anyone who registered it under
- * another name.
+ * The names this app's own MCP server (server/mcp/) may be registered under
+ * in the user's Claude config: APP_MCP_SERVER_NAME for anyone who chose
+ * their own, `agentwaggle` from the README's setup command, and `clauhort`,
+ * the app's old name, which registrations made before the rename still
+ * use. Every one is guarded, so nobody has to re-register for the guard to
+ * keep working.
  */
-const CLAUHORT_MCP_SERVER_NAME = process.env.APP_MCP_SERVER_NAME || 'clauhort';
+const MCP_SERVER_NAMES = [...new Set([process.env.APP_MCP_SERVER_NAME, 'agentwaggle', 'clauhort'].filter(Boolean))];
 
 /** Stream status while the CLI compacts an agent's context, and once it's done. */
 const COMPACTING_STATUS = '🗜️ Compacting context…';
@@ -100,12 +102,13 @@ function buildArgs(agent, { autocompactDefault } = {}) {
     // saying things they never wrote, and the asAgentId parameter added to
     // stop that was simply left out by some agents. An agent's normal reply
     // already reaches the chat, so it loses nothing it needs; every other
-    // Clauhort tool (reading the chat, adding/removing teammates) stays.
+    // tool of this app's (reading the chat, adding/removing teammates) stays.
     // Confirmed against the real CLI (2.1.301): this removes the tool under
     // both acceptEdits and --dangerously-skip-permissions. The "=" form
     // matters: --disallowedTools takes several values, and a bare next
-    // argument would be swallowed as another tool name.
-    `--disallowedTools=mcp__${CLAUHORT_MCP_SERVER_NAME}__send_message`,
+    // argument would be swallowed as another tool name. A comma list in that
+    // form removes every tool in it (2.1.306).
+    `--disallowedTools=${MCP_SERVER_NAMES.map((name) => `mcp__${name}__send_message`).join(',')}`,
   ];
   if (agent.dangerouslySkipPermissions) {
     args.push('--dangerously-skip-permissions');

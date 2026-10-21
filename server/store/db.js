@@ -246,6 +246,9 @@ function transaction(fn) {
  *   bubble) in the frontend — see buildMessageEl in app.js. Excluded from
  *   catch-up/hasSpokenInChat reasoning the same way isLocalCommandOnly is,
  *   for the same reason: nothing here ever reached the model as a real turn.
+ *   The one exception is a roster note (an agent added to or removed from
+ *   the chat), which does go out as catch-up — see ws/handler.js's
+ *   isCatchUpContent.
  * @property {string} createdAt - ISO 8601 timestamp
  */
 
@@ -1354,6 +1357,23 @@ export function getMessages(chatId, limit = 50, beforeId) {
     `).all(chatId, limit);
   }
   return rows.reverse().map(rowToMessage);
+}
+
+/**
+ * An agent's most recent real turn in a chat, however far back it is:
+ * its own reply, skipping isLocalCommandOnly replies and isSystemNote
+ * notes for the reasons their docs on the Message typedef give.
+ * @param {string} chatId
+ * @param {string} agentId
+ * @returns {Message | null}
+ */
+export function getLastAgentTurn(chatId, agentId) {
+  const row = db.prepare(`
+    SELECT * FROM messages WHERE chat_id = ? AND agent_id = ?
+      AND is_local_command_only = 0 AND is_system_note = 0
+    ORDER BY created_at DESC, rowid DESC LIMIT 1
+  `).get(chatId, agentId);
+  return row ? rowToMessage(row) : null;
 }
 
 /**

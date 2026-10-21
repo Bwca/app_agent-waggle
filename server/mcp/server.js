@@ -15,12 +15,12 @@ import { registerTools } from './tools.js';
 import { APP_VERSION } from '../public/appVersion.js';
 
 /**
- * Builds one fresh McpServer with every Clauhort tool registered.
+ * Builds one fresh McpServer with every Agentwaggle tool registered.
  * @param {import('ws').WebSocketServer} wss
  * @returns {McpServer}
  */
 function createMcpServer(wss) {
-  const mcpServer = new McpServer({ name: 'clauhort', version: APP_VERSION });
+  const mcpServer = new McpServer({ name: 'agentwaggle', version: APP_VERSION });
   registerTools(mcpServer, wss);
   return mcpServer;
 }

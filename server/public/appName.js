@@ -5,4 +5,4 @@
  * is a one-line change here instead of a find/replace across index.html,
  * app.js, and index.js.
  */
-export const APP_NAME = 'Clauhort';
+export const APP_NAME = 'Agentwaggle';

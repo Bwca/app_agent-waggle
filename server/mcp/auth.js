@@ -1,5 +1,5 @@
 /**
- * @fileoverview Auth gate for the /mcp endpoint (see mcp/index.js). Clauhort
+ * @fileoverview Auth gate for the /mcp endpoint (see mcp/index.js). Agentwaggle
  * has no authentication anywhere else — its only existing security boundary
  * is binding to 127.0.0.1 (server/index.js) — but /mcp is the first
  * network-reachable surface that can drive real tool-executing agents, so it
@@ -7,7 +7,7 @@
  * not a real boundary against a remote attacker: anyone who can already
  * reach loopback on this host could read MCP_AUTH_TOKEN out of the
  * process's own env anyway. Its actual job is stopping some *other*
- * unrelated local process/browser tab from silently driving Clauhort.
+ * unrelated local process/browser tab from silently driving Agentwaggle.
  */
 import { timingSafeEqual } from 'crypto';
 

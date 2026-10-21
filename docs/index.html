@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Clauhort — Multi-Agent Claude Chat</title>
-<meta name="description" content="Clauhort is a multi-agent Claude chat app — a group chat where every participant is a real Claude Code CLI instance with its own project, tools, and permissions." />
-<meta property="og:title" content="Clauhort — Multi-Agent Claude Chat" />
-<meta property="og:description" content="A group chat where every participant is a real Claude Code CLI instance — real tools, real MCP servers, real work." />
+<title>Agentwaggle — Multi-Agent Chat for Coding Agents</title>
+<meta name="description" content="Agentwaggle is a multi-agent chat app — a group chat where every participant is a real coding-agent CLI (Claude Code or opencode) with its own project, tools, and permissions." />
+<meta property="og:title" content="Agentwaggle — Multi-Agent Chat for Coding Agents" />
+<meta property="og:description" content="A group chat where every participant is a real coding-agent CLI (Claude Code or opencode) — real tools, real MCP servers, real work." />
 <meta property="og:image" content="assets/logo.png" />
 <meta property="og:type" content="website" />
 <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png" />
@@ -162,7 +162,7 @@
      background with light-theme accent colors — override with !important
      since its Svelte-scoped selectors (repeated classes) outrank a plain
      override on specificity alone. The replayed page content itself is
-     already dark (it's Clauhort's own UI), so this only re-themes the
+     already dark (it's Agentwaggle's own UI), so this only re-themes the
      player chrome around it. */
   .rr-player { background: var(--bg1) !important; box-shadow: none !important; border: 1px solid var(--border); border-radius: 10px !important; }
   .rr-controller { background: var(--bg2) !important; border-radius: 0 0 9px 9px !important; }
@@ -214,7 +214,7 @@
   <div class="wrap">
     <a class="brand" href="#top">
       <img src="assets/logo-header.png" alt="" />
-      Clauhort
+      Agentwaggle
     </a>
     <div class="links" id="nav-links">
       <a href="#why" data-i18n="nav.why">Why</a>
@@ -236,7 +236,7 @@
 <header id="top" class="hero">
   <div class="wrap">
     <div class="hero-body">
-      <div class="hero-logo"><img src="assets/logo.png" alt="Clauhort" /></div>
+      <div class="hero-logo"><img src="assets/logo.png" alt="Agentwaggle" /></div>
       <div>
         <div class="kicker" data-i18n="hero.kicker">Multi-agent Claude chat</div>
         <h1 data-i18n-html="hero.h1">A group chat where every participant is a real <span class="accent">Claude Code</span> instance.</h1>
@@ -263,9 +263,9 @@
 
 <section id="why">
   <div class="wrap">
-    <p class="section-kicker" data-i18n="why.kicker">Why Clauhort</p>
+    <p class="section-kicker" data-i18n="why.kicker">Why Agentwaggle</p>
     <h2 data-i18n="why.h2">Not a sandbox. Not a demo. The real thing.</h2>
-    <p class="section-lede" data-i18n="why.lede">Every agent in a Clauhort chat is a genuine, unrestricted Claude Code CLI process — the same tool you'd run in a terminal, just given a seat in a group chat.</p>
+    <p class="section-lede" data-i18n="why.lede">Every agent in a Agentwaggle chat is a genuine, unrestricted Claude Code CLI process — the same tool you'd run in a terminal, just given a seat in a group chat.</p>
     <div class="benefit-grid">
       <div class="benefit-card">
         <span class="icon">⚙️</span>
@@ -313,7 +313,7 @@
       <div class="feature-card"><span class="icon">🧠</span><div><h3 data-i18n="features.f14.title">Per-agent model</h3><p data-i18n="features.f14.desc">Pick a model family per agent — Opus, Sonnet, Haiku, Fable, or a custom pinned ID — at creation, or switch it later without losing conversation history.</p></div></div>
       <div class="feature-card"><span class="icon">🏷️</span><div><h3 data-i18n="features.f15.title">Chat categories</h3><p data-i18n="features.f15.desc">Group chats into collapsible sidebar sections — pick an existing category from a one-click popover, or add a new one on the spot.</p></div></div>
       <div class="feature-card"><span class="icon">💰</span><div><h3 data-i18n="features.f16.title">Cost &amp; context budget</h3><p data-i18n="features.f16.desc">Each agent's panel shows a running cost total and its last turn's resumed-context size, so a session that's gotten expensive is visible before it's a problem — context is also auto-compacted by the CLI itself, with a note posted into the chat whenever that happens.</p></div></div>
-      <div class="feature-card"><span class="icon">🔌</span><div><h3 data-i18n="features.f17.title">Clauhort as an MCP server</h3><p data-i18n-html="features.f17.desc">Let an external Claude Code or Claude Desktop instance drive Clauhort itself over <code>/mcp</code> — create chats and agents, send a message, and get the real reply back, through the exact same code path as the UI.</p></div></div>
+      <div class="feature-card"><span class="icon">🔌</span><div><h3 data-i18n="features.f17.title">Agentwaggle as an MCP server</h3><p data-i18n-html="features.f17.desc">Let an external Claude Code or Claude Desktop instance drive Agentwaggle itself over <code>/mcp</code> — create chats and agents, send a message, and get the real reply back, through the exact same code path as the UI.</p></div></div>
       <div class="feature-card"><span class="icon">🎤</span><div><h3 data-i18n="features.f18.title">Voice dictation</h3><p data-i18n="features.f18.desc">Click the mic next to the composer and talk — your browser transcribes speech into the message box in real time, so you can review or edit it before sending.</p></div></div>
     </div>
   </div>
@@ -385,7 +385,7 @@
     <div id="player-wrap">
       <p id="player-status" data-i18n="demo.pickPrompt">Pick a use case above to load its recording.</p>
     </div>
-    <p class="demo-note" data-i18n="demo.note">GitHub Pages can only serve static files — Clauhort itself needs a live Node/WebSocket server, so this page shows recordings rather than the running app. Run it yourself below to try the real thing.</p>
+    <p class="demo-note" data-i18n="demo.note">GitHub Pages can only serve static files — Agentwaggle itself needs a live Node/WebSocket server, so this page shows recordings rather than the running app. Run it yourself below to try the real thing.</p>
   </div>
 </section>
 
@@ -418,14 +418,14 @@ http://localhost:3001</pre>
     </p>
 
     <div class="mechanism-note note-warn" data-i18n-html="get.disclaimer">
-      <strong>Disclaimer:</strong> Clauhort is provided "AS IS", WITHOUT WARRANTY OF ANY KIND, express or implied — see the
+      <strong>Disclaimer:</strong> Agentwaggle is provided "AS IS", WITHOUT WARRANTY OF ANY KIND, express or implied — see the
       <a href="https://github.com/Bwca/app_clauhort/blob/master/LICENSE" target="_blank" rel="noopener">MIT license</a> for the full text.
       The authors and contributors are not liable for any claim, damages, or other liability arising from the software or its use.
       <ul>
-        <li>Clauhort itself doesn't read, write, or execute anything on your system. Every agent is the real <code>claude</code> CLI — Anthropic's own tool, installed and authenticated by you, independently of Clauhort — and every file edit, shell command, or browser action is carried out by that CLI process under its own permission model. Clauhort only launches it, relays messages to it, and displays what it reports back, including its own permission prompts, which you still review and approve yourself. You're solely responsible for what you authorize the CLI to do.</li>
+        <li>Agentwaggle itself doesn't read, write, or execute anything on your system. Every agent is the real <code>claude</code> CLI — Anthropic's own tool, installed and authenticated by you, independently of Agentwaggle — and every file edit, shell command, or browser action is carried out by that CLI process under its own permission model. Agentwaggle only launches it, relays messages to it, and displays what it reports back, including its own permission prompts, which you still review and approve yourself. You're solely responsible for what you authorize the CLI to do.</li>
         <li>No guarantee of correctness, security, or availability — back up anything you can't afford to lose.</li>
         <li>Any Anthropic API usage charges, rate limits, or outages are between you and Anthropic, not this project.</li>
-        <li>Clauhort is an independent project, not affiliated with, endorsed by, or sponsored by Anthropic. "Claude" and "Claude Code" are Anthropic trademarks, referenced only to describe compatibility.</li>
+        <li>Agentwaggle is an independent project, not affiliated with, endorsed by, or sponsored by Anthropic. "Claude" and "Claude Code" are Anthropic trademarks, referenced only to describe compatibility.</li>
       </ul>
       You use this software entirely at your own risk. Full text in the
       <a href="https://github.com/Bwca/app_clauhort#disclaimer" target="_blank" rel="noopener">README</a>.
@@ -435,7 +435,7 @@ http://localhost:3001</pre>
 
 <footer>
   <div class="wrap">
-    <span data-i18n="footer.copyright">© Clauhort — MIT licensed</span>
+    <span data-i18n="footer.copyright">© Agentwaggle — MIT licensed</span>
     <div class="links">
       <a href="https://github.com/Bwca/app_clauhort" target="_blank" rel="noopener">GitHub</a>
       <a href="https://github.com/Bwca/app_clauhort#readme" target="_blank" rel="noopener">README</a>
@@ -464,9 +464,9 @@ http://localhost:3001</pre>
       'hero.ctaStart': 'Get started', 'hero.ctaWatch': 'Watch it in action', 'hero.ctaSource': 'View source',
       'hero.badgeBuild': 'No build step, no framework', 'hero.badgeSqlite': 'SQLite, zero native deps', 'hero.badgeLicense': 'MIT licensed',
 
-      'why.kicker': 'Why Clauhort',
+      'why.kicker': 'Why Agentwaggle',
       'why.h2': 'Not a sandbox. Not a demo. The real thing.',
-      'why.lede': "Every agent in a Clauhort chat is a genuine, unrestricted Claude Code CLI process — the same tool you'd run in a terminal, just given a seat in a group chat.",
+      'why.lede': "Every agent in a Agentwaggle chat is a genuine, unrestricted Claude Code CLI process — the same tool you'd run in a terminal, just given a seat in a group chat.",
       'why.b1.title': 'Full tool access, per agent',
       'why.b1.desc': 'Each agent runs against its own working directory with its own real tools, skills, and MCP servers — nothing stripped down or simulated for the chat UI.',
       'why.b2.title': 'Agents that work together',
@@ -511,8 +511,8 @@ http://localhost:3001</pre>
       'features.f15.desc': 'Group chats into collapsible sidebar sections — pick an existing category from a one-click popover, or add a new one on the spot.',
       'features.f16.title': 'Cost & context budget',
       'features.f16.desc': "Each agent's panel shows a running cost total and its last turn's resumed-context size, so a session that's gotten expensive is visible before it's a problem — context is also auto-compacted by the CLI itself, with a note posted into the chat whenever that happens.",
-      'features.f17.title': 'Clauhort as an MCP server',
-      'features.f17.desc': "Let an external Claude Code or Claude Desktop instance drive Clauhort itself over <code>/mcp</code> — create chats and agents, send a message, and get the real reply back, through the exact same code path as the UI.",
+      'features.f17.title': 'Agentwaggle as an MCP server',
+      'features.f17.desc': "Let an external Claude Code or Claude Desktop instance drive Agentwaggle itself over <code>/mcp</code> — create chats and agents, send a message, and get the real reply back, through the exact same code path as the UI.",
       'features.f18.title': 'Voice dictation',
       'features.f18.desc': "Click the mic next to the composer and talk — your browser transcribes speech into the message box in real time, so you can review or edit it before sending.",
 
@@ -541,7 +541,7 @@ http://localhost:3001</pre>
       'demo.pickPrompt': 'Pick a use case above to load its recording.',
       'demo.loading': 'Loading recording…',
       'demo.loadError': "Couldn't load this recording",
-      'demo.note': 'GitHub Pages can only serve static files — Clauhort itself needs a live Node/WebSocket server, so this page shows recordings rather than the running app. Run it yourself below to try the real thing.',
+      'demo.note': 'GitHub Pages can only serve static files — Agentwaggle itself needs a live Node/WebSocket server, so this page shows recordings rather than the running app. Run it yourself below to try the real thing.',
 
       'usecases.create-agent-chat.label': 'Create agent + chat',
       'usecases.create-agent-chat.desc': 'Creating an agent, creating a chat, sending a first message, and watching a streamed reply.',
@@ -568,9 +568,9 @@ http://localhost:3001</pre>
       'usecases.agent-budget.label': 'Cost & context budget',
       'usecases.agent-budget.desc': "Sending a couple of messages and watching the agent panel's cost/context badge grow live as each turn actually spends real tokens.",
       'usecases.mcp-server.label': 'MCP server',
-      'usecases.mcp-server.desc': "An external Claude instance drives Clauhort over /mcp — creating an agent and a chat, then sending a message and getting a real reply — all without a single click in the UI.",
+      'usecases.mcp-server.desc': "An external Claude instance drives Agentwaggle over /mcp — creating an agent and a chat, then sending a message and getting a real reply — with nothing typed in the UI, which only gets one click to open the new chat and watch.",
       'usecases.dictation.label': 'Voice dictation',
-      'usecases.dictation.desc': "Clicking the mic next to the composer to dictate a message, then sending it and watching the agent reply.",
+      'usecases.dictation.desc': "Clicking the mic next to the composer to dictate a message, then sending it and watching the agent reply. The recording browser had no microphone, so the speech itself is simulated; the rest is real.",
 
       'get.kicker': 'Get started',
       'get.h2': 'Run it locally in under a minute',
@@ -586,19 +586,19 @@ http://localhost:3001</pre>
       'get.links': `See the <a href="https://github.com/Bwca/app_clauhort#readme" target="_blank" rel="noopener">full README</a> for environment
       variables, E2E tests, and every agent-creation option, or the
       <a href="https://github.com/Bwca/app_clauhort/blob/master/CHANGELOG.md" target="_blank" rel="noopener">changelog</a> for release history.`,
-      'get.disclaimer': `<strong>Disclaimer:</strong> Clauhort is provided "AS IS", WITHOUT WARRANTY OF ANY KIND, express or implied — see the
+      'get.disclaimer': `<strong>Disclaimer:</strong> Agentwaggle is provided "AS IS", WITHOUT WARRANTY OF ANY KIND, express or implied — see the
       <a href="https://github.com/Bwca/app_clauhort/blob/master/LICENSE" target="_blank" rel="noopener">MIT license</a> for the full text.
       The authors and contributors are not liable for any claim, damages, or other liability arising from the software or its use.
       <ul>
-        <li>Clauhort itself doesn't read, write, or execute anything on your system. Every agent is the real <code>claude</code> CLI — Anthropic's own tool, installed and authenticated by you, independently of Clauhort — and every file edit, shell command, or browser action is carried out by that CLI process under its own permission model. Clauhort only launches it, relays messages to it, and displays what it reports back, including its own permission prompts, which you still review and approve yourself. You're solely responsible for what you authorize the CLI to do.</li>
+        <li>Agentwaggle itself doesn't read, write, or execute anything on your system. Every agent is the real <code>claude</code> CLI — Anthropic's own tool, installed and authenticated by you, independently of Agentwaggle — and every file edit, shell command, or browser action is carried out by that CLI process under its own permission model. Agentwaggle only launches it, relays messages to it, and displays what it reports back, including its own permission prompts, which you still review and approve yourself. You're solely responsible for what you authorize the CLI to do.</li>
         <li>No guarantee of correctness, security, or availability — back up anything you can't afford to lose.</li>
         <li>Any Anthropic API usage charges, rate limits, or outages are between you and Anthropic, not this project.</li>
-        <li>Clauhort is an independent project, not affiliated with, endorsed by, or sponsored by Anthropic. "Claude" and "Claude Code" are Anthropic trademarks, referenced only to describe compatibility.</li>
+        <li>Agentwaggle is an independent project, not affiliated with, endorsed by, or sponsored by Anthropic. "Claude" and "Claude Code" are Anthropic trademarks, referenced only to describe compatibility.</li>
       </ul>
       You use this software entirely at your own risk. Full text in the
       <a href="https://github.com/Bwca/app_clauhort#disclaimer" target="_blank" rel="noopener">README</a>.`,
 
-      'footer.copyright': '© Clauhort — MIT licensed',
+      'footer.copyright': '© Agentwaggle — MIT licensed',
       'footer.changelog': 'Changelog', 'footer.license': 'License', 'footer.disclaimer': 'Disclaimer',
     },
     fr: {
@@ -611,9 +611,9 @@ http://localhost:3001</pre>
       'hero.ctaStart': 'Démarrer', 'hero.ctaWatch': 'Voir la démo', 'hero.ctaSource': 'Voir le code source',
       'hero.badgeBuild': 'Aucune étape de build, aucun framework', 'hero.badgeSqlite': 'SQLite, zéro dépendance native', 'hero.badgeLicense': 'Licence MIT',
 
-      'why.kicker': 'Pourquoi Clauhort',
+      'why.kicker': 'Pourquoi Agentwaggle',
       'why.h2': 'Pas un bac à sable. Pas une démo. La vraie chose.',
-      'why.lede': "Chaque agent d'une discussion Clauhort est un véritable processus Claude Code CLI, sans restriction — le même outil que vous exécuteriez dans un terminal, à qui l'on a simplement donné une place dans une discussion de groupe.",
+      'why.lede': "Chaque agent d'une discussion Agentwaggle est un véritable processus Claude Code CLI, sans restriction — le même outil que vous exécuteriez dans un terminal, à qui l'on a simplement donné une place dans une discussion de groupe.",
       'why.b1.title': 'Accès complet aux outils, par agent',
       'why.b1.desc': "Chaque agent s'exécute dans son propre répertoire de travail avec ses propres outils, compétences et serveurs MCP réels — rien n'est simplifié ni simulé pour l'interface de discussion.",
       'why.b2.title': 'Des agents qui travaillent ensemble',
@@ -658,8 +658,8 @@ http://localhost:3001</pre>
       'features.f15.desc': "Regroupez les discussions en sections repliables dans la barre latérale — choisissez une catégorie existante depuis un menu en un clic, ou ajoutez-en une nouvelle sur place.",
       'features.f16.title': 'Budget de coût et de contexte',
       'features.f16.desc': "Le panneau de chaque agent affiche un coût cumulatif et la taille du contexte repris lors de son dernier tour, pour voir qu'une session est devenue coûteuse avant que ça pose problème — le contexte est aussi compacté automatiquement par la CLI elle-même, avec une note publiée dans la discussion chaque fois que ça arrive.",
-      'features.f17.title': 'Clauhort comme serveur MCP',
-      'features.f17.desc': "Laissez une instance externe de Claude Code ou Claude Desktop piloter Clauhort elle-même via <code>/mcp</code> — créer des discussions et des agents, envoyer un message et recevoir la vraie réponse, par exactement le même chemin de code que l'interface.",
+      'features.f17.title': 'Agentwaggle comme serveur MCP',
+      'features.f17.desc': "Laissez une instance externe de Claude Code ou Claude Desktop piloter Agentwaggle elle-même via <code>/mcp</code> — créer des discussions et des agents, envoyer un message et recevoir la vraie réponse, par exactement le même chemin de code que l'interface.",
       'features.f18.title': 'Dictée vocale',
       'features.f18.desc': "Cliquez sur le micro à côté du champ de saisie et parlez — votre navigateur transcrit la parole dans le message en temps réel, pour que vous puissiez le relire ou le modifier avant de l'envoyer.",
 
@@ -688,7 +688,7 @@ http://localhost:3001</pre>
       'demo.pickPrompt': 'Choisissez un scénario ci-dessus pour charger son enregistrement.',
       'demo.loading': "Chargement de l'enregistrement…",
       'demo.loadError': "Impossible de charger cet enregistrement",
-      'demo.note': "GitHub Pages ne peut servir que des fichiers statiques — Clauhort a besoin d'un vrai serveur Node/WebSocket, donc cette page montre des enregistrements plutôt que l'application en fonctionnement. Lancez-la vous-même ci-dessous pour essayer la vraie chose.",
+      'demo.note': "GitHub Pages ne peut servir que des fichiers statiques — Agentwaggle a besoin d'un vrai serveur Node/WebSocket, donc cette page montre des enregistrements plutôt que l'application en fonctionnement. Lancez-la vous-même ci-dessous pour essayer la vraie chose.",
 
       'usecases.create-agent-chat.label': 'Créer agent + discussion',
       'usecases.create-agent-chat.desc': 'Créer un agent, créer une discussion, envoyer un premier message et regarder une réponse diffusée en continu.',
@@ -715,9 +715,9 @@ http://localhost:3001</pre>
       'usecases.agent-budget.label': 'Budget de coût et de contexte',
       'usecases.agent-budget.desc': "Envoyer quelques messages et regarder le badge de coût/contexte du panneau de l'agent grandir en direct à mesure que chaque tour dépense réellement des jetons.",
       'usecases.mcp-server.label': 'Serveur MCP',
-      'usecases.mcp-server.desc': "Une instance Claude externe pilote Clauhort via /mcp — elle crée un agent et une discussion, puis envoie un message et reçoit une vraie réponse — le tout sans un seul clic dans l'interface.",
+      'usecases.mcp-server.desc': "Une instance Claude externe pilote Agentwaggle via /mcp — elle crée un agent et une discussion, puis envoie un message et reçoit une vraie réponse — sans rien saisir dans l'interface, où un seul clic ouvre la nouvelle discussion pour regarder.",
       'usecases.dictation.label': 'Dictée vocale',
-      'usecases.dictation.desc': "Cliquer sur le micro à côté du champ de saisie pour dicter un message, puis l'envoyer et regarder l'agent répondre.",
+      'usecases.dictation.desc': "Cliquer sur le micro à côté du champ de saisie pour dicter un message, puis l'envoyer et regarder l'agent répondre. Le navigateur de l'enregistrement n'avait pas de micro : la parole est simulée, le reste est réel.",
 
       'get.kicker': 'Démarrer',
       'get.h2': 'Lancez-le localement en moins d\'une minute',
@@ -733,19 +733,19 @@ http://localhost:3001</pre>
       'get.links': `Consultez le <a href="https://github.com/Bwca/app_clauhort#readme" target="_blank" rel="noopener">README complet</a> pour les variables
       d'environnement, les tests E2E et toutes les options de création d'agent, ou le
       <a href="https://github.com/Bwca/app_clauhort/blob/master/CHANGELOG.md" target="_blank" rel="noopener">journal des modifications</a> pour l'historique des versions.`,
-      'get.disclaimer': `<strong>Avertissement :</strong> Clauhort est fourni « TEL QUEL », SANS GARANTIE D'AUCUNE SORTE, expresse ou implicite — voir la
+      'get.disclaimer': `<strong>Avertissement :</strong> Agentwaggle est fourni « TEL QUEL », SANS GARANTIE D'AUCUNE SORTE, expresse ou implicite — voir la
       <a href="https://github.com/Bwca/app_clauhort/blob/master/LICENSE" target="_blank" rel="noopener">licence MIT</a> pour le texte complet.
       Les auteurs et contributeurs ne sont pas responsables des réclamations, dommages ou autres responsabilités découlant du logiciel ou de son utilisation.
       <ul>
-        <li>Clauhort lui-même ne lit, n'écrit ni n'exécute rien sur votre système. Chaque agent est le véritable CLI <code>claude</code> — l'outil d'Anthropic, installé et authentifié par vous, indépendamment de Clauhort — et chaque modification de fichier, commande shell ou action de navigateur est exécutée par ce processus CLI selon son propre modèle de permissions. Clauhort ne fait que le lancer, lui relayer les messages et afficher ce qu'il rapporte, y compris ses propres invites de permission, que vous devez toujours vérifier et approuver vous-même. Vous êtes seul responsable de ce que vous autorisez la CLI à faire.</li>
+        <li>Agentwaggle lui-même ne lit, n'écrit ni n'exécute rien sur votre système. Chaque agent est le véritable CLI <code>claude</code> — l'outil d'Anthropic, installé et authentifié par vous, indépendamment de Agentwaggle — et chaque modification de fichier, commande shell ou action de navigateur est exécutée par ce processus CLI selon son propre modèle de permissions. Agentwaggle ne fait que le lancer, lui relayer les messages et afficher ce qu'il rapporte, y compris ses propres invites de permission, que vous devez toujours vérifier et approuver vous-même. Vous êtes seul responsable de ce que vous autorisez la CLI à faire.</li>
         <li>Aucune garantie d'exactitude, de sécurité ou de disponibilité — faites des sauvegardes de tout ce que vous ne pouvez pas vous permettre de perdre.</li>
         <li>Les frais d'utilisation de l'API Anthropic, les limites de débit ou les pannes sont une affaire entre vous et Anthropic, pas ce projet.</li>
-        <li>Clauhort est un projet indépendant, non affilié à, ni endossé ni commandité par Anthropic. « Claude » et « Claude Code » sont des marques de commerce d'Anthropic, mentionnées uniquement pour décrire la compatibilité.</li>
+        <li>Agentwaggle est un projet indépendant, non affilié à, ni endossé ni commandité par Anthropic. « Claude » et « Claude Code » sont des marques de commerce d'Anthropic, mentionnées uniquement pour décrire la compatibilité.</li>
       </ul>
       Vous utilisez ce logiciel entièrement à vos propres risques. Texte complet dans le
       <a href="https://github.com/Bwca/app_clauhort#disclaimer" target="_blank" rel="noopener">README</a>.`,
 
-      'footer.copyright': '© Clauhort — Licence MIT',
+      'footer.copyright': '© Agentwaggle — Licence MIT',
       'footer.changelog': 'Journal des modifications', 'footer.license': 'Licence', 'footer.disclaimer': 'Avertissement',
     },
   };
