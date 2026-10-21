@@ -150,6 +150,10 @@
       </div>
       <form id="agent-form">
         <div id="agent-form-fields">
+        <label class="field-label field-span-2"><span data-i18n="agentModal.providerLabel">Runs as</span> <span class="field-hint" data-i18n="agentModal.providerHint">(the CLI behind this agent — fixed once created)</span>
+          <select id="agent-provider" data-testid="agent-provider-select"></select>
+          <span id="agent-provider-status" class="field-hint" data-testid="agent-provider-status"></span>
+        </label>
         <label class="field-label field-span-2"><span data-i18n="agentModal.nameLabel">Name</span>
           <div id="agent-name-row">
             <input id="agent-name" data-testid="agent-name-input" data-i18n-placeholder="agentModal.namePlaceholder" placeholder="e.g. Claudia" autocomplete="off" required />
@@ -169,21 +173,21 @@
         <label class="field-label"><span data-i18n="agentModal.noteLabel">Note</span> <span class="field-hint" data-i18n="agentModal.noteHint">(optional — a reminder for yourself of why this agent exists)</span>
           <textarea id="agent-note" data-testid="agent-note-input" data-i18n-placeholder="agentModal.notePlaceholder" placeholder="e.g. Refactoring the payments module" rows="2"></textarea>
         </label>
-        <label class="field-label"><span data-i18n="agentModal.resumeIdLabel">Resume ID</span> <span class="field-hint" data-i18n-html="agentModal.resumeIdHint">(optional — from <code>claude --resume</code>)</span>
+        <label class="field-label"><span data-i18n="agentModal.resumeIdLabel">Resume ID</span> <span id="agent-resume-hint" class="field-hint">(optional — a session from <code>claude --resume</code>)</span>
           <input id="agent-resume" data-testid="agent-resume-input" data-i18n-placeholder="agentModal.resumePlaceholder" placeholder="e.g. multi-agent-claude-chat" autocomplete="off" />
         </label>
-        <label class="field-label"><span data-i18n="agentModal.modelLabel">Model</span> <span class="field-hint" data-i18n="agentModal.modelHint">(optional — pick a family, or Custom for an exact model ID)</span>
+        <label class="field-label"><span data-i18n="agentModal.modelLabel">Model</span> <span id="agent-model-hint" class="field-hint">(optional — pick a family, or Custom for an exact model ID)</span>
           <select id="agent-model" data-testid="agent-model-select">
-            <option value="" data-i18n="agentModal.modelDefaultOption">Default (let Claude Code choose)</option>
+            <option value="">Default (let Claude Code choose)</option>
             <option value="opus">Opus</option>
             <option value="sonnet">Sonnet</option>
             <option value="haiku">Haiku</option>
             <option value="fable">Fable</option>
             <option value="custom" data-i18n="agentModal.modelCustomOption">Custom…</option>
           </select>
-          <input id="agent-model-custom" data-testid="agent-model-custom-input" data-i18n-placeholder="agentModal.modelCustomPlaceholder" placeholder="e.g. claude-opus-4-1-20250805" autocomplete="off" hidden />
+          <input id="agent-model-custom" data-testid="agent-model-custom-input" placeholder="e.g. claude-opus-4-1-20250805" autocomplete="off" hidden />
         </label>
-        <label class="field-label"><span data-i18n="agentModal.autocompactLabel">Compaction window</span> <span class="field-hint" data-i18n="agentModal.autocompactHint">(optional — context size at which this agent's session gets summarized)</span>
+        <label id="agent-autocompact-label" class="field-label"><span data-i18n="agentModal.autocompactLabel">Compaction window</span> <span class="field-hint" data-i18n="agentModal.autocompactHint">(optional — context size at which this agent's session gets summarized)</span>
           <input id="agent-autocompact" data-testid="agent-autocompact-input" list="autocompact-presets" autocomplete="off" />
         </label>
         <div class="field-label"><span data-i18n="agentModal.colorLabel">Color</span>
@@ -339,14 +343,14 @@
       </div>
       <div id="confirm-model-row" data-testid="confirm-model-row" hidden>
         <select id="confirm-model-select" data-testid="confirm-model-select">
-          <option value="" data-i18n="agentModal.modelDefaultOption">Default (let Claude Code choose)</option>
+          <option value="">Default (let Claude Code choose)</option>
           <option value="opus">Opus</option>
           <option value="sonnet">Sonnet</option>
           <option value="haiku">Haiku</option>
           <option value="fable">Fable</option>
           <option value="custom" data-i18n="agentModal.modelCustomOption">Custom…</option>
         </select>
-        <input type="text" id="confirm-model-custom-input" data-testid="confirm-model-custom-input" data-i18n-placeholder="agentModal.modelCustomPlaceholder" placeholder="e.g. claude-opus-4-1-20250805" hidden />
+        <input type="text" id="confirm-model-custom-input" data-testid="confirm-model-custom-input" placeholder="e.g. claude-opus-4-1-20250805" hidden />
       </div>
       <div id="confirm-footer">
         <button type="button" id="confirm-cancel" data-testid="confirm-cancel" data-i18n="common.cancel">Cancel</button>

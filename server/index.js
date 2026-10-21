@@ -13,6 +13,7 @@ import createAgentsRouter from './routes/agents.js';
 import createChatsRouter from './routes/chats.js';
 import browseRouter from './routes/browse.js';
 import settingsRouter from './routes/settings.js';
+import providersRouter from './routes/providers.js';
 import quickMessagesRouter from './routes/quickMessages.js';
 import { mountMcp } from './mcp/index.js';
 import { handleConnection } from './ws/handler.js';
@@ -78,6 +79,7 @@ app.use('/api/agents', createAgentsRouter(wss));
 app.use('/api/chats', createChatsRouter(wss));
 app.use('/api/browse', browseRouter);
 app.use('/api/settings', settingsRouter);
+app.use('/api/providers', providersRouter);
 app.use('/api/quick-messages', quickMessagesRouter);
 
 mountMcp(app, wss);

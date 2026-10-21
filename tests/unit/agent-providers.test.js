@@ -7,7 +7,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { DEFAULT_PROVIDER_ID, getProvider, providerForAgent } from '../../server/services/providers/index.js';
-import { claudeProvider } from '../../server/services/providers/claude.js';
+import { claudeProvider, encodeTurn } from '../../server/services/providers/claude.js';
 
 describe('agent provider registry', () => {
   test('defaults to Claude', () => {
@@ -57,7 +57,11 @@ describe('Claude provider', () => {
 
   test('writes one stream-json user message per turn', () => {
     const content = [{ type: 'text', text: 'hi' }];
-    assert.equal(claudeProvider.encodeTurn(content), '{"type":"user","message":{"role":"user","content":[{"type":"text","text":"hi"}]}}\n');
+    assert.equal(encodeTurn(content), '{"type":"user","message":{"role":"user","content":[{"type":"text","text":"hi"}]}}\n');
+    const written = [];
+    const state = claudeProvider.createProcessState({ id: 'a', workingDir: '/work' }, { write: (data) => written.push(data) });
+    claudeProvider.startTurn(state, content);
+    assert.deepEqual(written, [encodeTurn(content)]);
   });
 
   test('reads skills and MCP status off init, and nothing else as turn content', () => {
@@ -74,5 +78,36 @@ describe('Claude provider', () => {
     for (const type of ['assistant', 'user', 'result']) {
       assert.equal(claudeProvider.inspectEvent({ type }).isTurnContent, true, type);
     }
+  });
+});
+
+describe('stored agents', () => {
+  test('an agent carries the provider it was created with, defaulting to Claude', async () => {
+    process.env.APP_DB_FILE = ':memory:';
+    const db = await import('../../server/store/db.js');
+    await db.loadDb();
+    const plain = await db.createAgent({ id: 'p1', name: 'Plain', color: '#fff', workingDir: '/tmp' });
+    assert.equal(plain.provider, 'claude');
+    const other = await db.createAgent({ id: 'p2', name: 'Other', color: '#fff', workingDir: '/tmp', provider: 'opencode' });
+    assert.equal(db.getAgent(other.id).provider, 'opencode');
+  });
+});
+
+describe('provider display details', () => {
+  test('every provider the UI offers is one the server can run', async () => {
+    const { PROVIDER_IDS, providerDisplayFor } = await import('../../server/public/agentProviders.js');
+    const { hasProvider } = await import('../../server/services/providers/index.js');
+    for (const id of PROVIDER_IDS) {
+      assert.ok(hasProvider(id), id);
+      assert.equal(providerDisplayFor(id).id, id);
+    }
+    assert.equal(PROVIDER_IDS[0], DEFAULT_PROVIDER_ID);
+    assert.ok(PROVIDER_IDS.includes('opencode'));
+  });
+
+  test('formats each provider\'s model ids its own way', async () => {
+    const { providerDisplayFor } = await import('../../server/public/agentProviders.js');
+    assert.equal(providerDisplayFor('claude').formatModel('claude-opus-4-1-20250805'), 'Opus 4.1');
+    assert.equal(providerDisplayFor('opencode').formatModel('ollama/local-agent'), 'local-agent');
   });
 });

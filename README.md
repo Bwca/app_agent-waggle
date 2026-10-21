@@ -46,6 +46,7 @@ A multi-agent Claude chat app. Each participant in a conversation is a Claude Co
 
 - Node.js 22.13+ (needed for `node:sqlite` without a flag; project pins v22.13.0 via nvm — see `.nvmrc`)
 - [Claude Code CLI](https://claude.ai/code) installed and authenticated, available on `PATH` as `claude`
+- Optional: [opencode](https://opencode.ai) 1.19+ for opencode agents. Looked for, first match wins: `OPENCODE_BIN`, the agent's own project (`node_modules/.bin/opencode`, as `npm i -D opencode-ai` installs it), `PATH`, then `~/.opencode/bin/opencode` (where its install script puts it). The New Agent form only offers opencode once one of these is found — for a project-pinned copy, once that project is the working directory — and says which one it will use. Its model and agent setup come from that project's own `opencode.json`
 - Linux, macOS, or Windows — developed and tested on Linux; Windows-specific path/spawn handling has been audited but not run on an actual Windows machine, so treat it as "should work," not battle-tested
 
 ## Setup
@@ -79,6 +80,7 @@ Other environment variables:
 |----------|---------|---------|
 | `PORT` | `3001` | HTTP/WebSocket port |
 | `CLAUDE_BIN` | `claude` (resolved via `PATH`) | Override if `claude` isn't on `PATH` under that name |
+| `OPENCODE_BIN` | the agent project's `node_modules/.bin/opencode`, else `opencode` on `PATH`, else `~/.opencode/bin/opencode` | Override the binary every opencode agent runs |
 | `APP_DB_FILE` | `server/store/data.sqlite3` | Override the SQLite file path (tests use `:memory:`) |
 | `APP_LOG_DIR` | `server/logs` | Where structured log files (and, if enabled, per-chat transcripts — see below) are written |
 | `APP_LOG_LEVEL` | `info` | Minimum level written to the log file: `debug`, `info`, `warn`, `error`, or `silent` to disable file logging entirely. The console always stays at `info`+ regardless of this setting |
@@ -91,9 +93,10 @@ Other environment variables:
 
 | Field | Required | Description |
 |-------|----------|-------------|
+| Runs as | yes | Which CLI the agent is: Claude Code (default) or opencode. Fixed at creation. The rest of the form fits itself to the choice — e.g. opencode has no model families (type an exact `provider/model` id), no compaction window and no browser access |
 | Name | yes | Display name used for `@mentions` |
 | Working Directory | yes | Absolute path — the agent's cwd and default tool-access scope. Directories already used by other agents show up as one-click chips, so adding a second agent to the same project doesn't mean re-browsing to it |
-| Resume ID | no | Pass a `--resume` conversation ID to pick up a named Claude session |
+| Resume ID | no | A session ID to pick up: `claude --resume` for Claude, `opencode --session` for opencode |
 | Model | no | Defaults to letting Claude Code choose. Pick a family (Opus/Sonnet/Haiku/Fable) or Custom for a full pinned model ID. Unlike the fields below, it can be changed later too, via the agent's ⋮ menu "Switch model" action — takes effect on the next message, same conversation history |
 | Note | no | Freeform reminder of why you created this agent — purely for you, never sent to the CLI. Unlike the fields below, it can be added or edited any time from the agent panel (🗒), not just at creation |
 | Color | yes | Avatar color |

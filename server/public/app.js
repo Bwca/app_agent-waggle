@@ -7,7 +7,7 @@ import { DICTS, DEFAULT_LOCALE, translate } from './i18n/index.js';
 import { renderMarkdown } from './markdown.js';
 import { APP_NAME } from './appName.js';
 import { APP_VERSION } from './appVersion.js';
-import { DEFAULT_PROVIDER_ID, nameGeneratorFor } from './agentProviders.js';
+import { DEFAULT_PROVIDER_ID, PROVIDER_IDS, nameGeneratorFor, providerDisplayFor } from './agentProviders.js';
 import { AUTOCOMPACT_PRESETS } from './autocompact.js';
 
 // ─── Types (JSDoc only) ─────────────────────────────────────────────────────
@@ -18,7 +18,8 @@ import { AUTOCOMPACT_PRESETS } from './autocompact.js';
  * @property {string} name
  * @property {string} color
  * @property {string} workingDir
- * @property {string} [resumeId] - Optional claude --resume conversation ID
+ * @property {string} provider - Which CLI the agent runs as (see agentProviders.js)
+ * @property {string} [resumeId] - Optional --resume session ID for that CLI
  * @property {boolean} [dangerouslySkipPermissions] - "YOLO mode"
  * @property {boolean} [isObserver] - Never responds to broadcast messages,
  *   only @mentions — sees the full chat history instead of the recent window
@@ -642,15 +643,21 @@ const agentDirInput    = $('#agent-dir');
 const agentDirBrowseBtn = $('#agent-dir-browse');
 const agentDirRecent   = $('#agent-dir-recent');
 const agentDirRecentWrap = $('#agent-dir-recent-wrap');
+const agentProviderSelect = $('#agent-provider');
+const agentProviderStatus = $('#agent-provider-status');
 const agentResumeInput = $('#agent-resume');
+const agentResumeHint  = $('#agent-resume-hint');
 const agentModelInput  = $('#agent-model');
 const agentModelCustomInput = $('#agent-model-custom');
+const agentModelHint   = $('#agent-model-hint');
 const agentAutocompactInput = $('#agent-autocompact');
+const agentAutocompactLabel = $('#agent-autocompact-label');
 const agentNoteInput   = $('#agent-note');
 const colorGrid        = $('#color-grid');
 const yoloModeCheck    = $('#yolo-mode-check');
 const observerModeCheck = $('#observer-mode-check');
 const chromeAccessCheck = $('#chrome-access-check');
+const chromeAccessLabel = $('#chrome-access-label');
 const addToChatLabel   = $('#add-to-chat-label');
 const addToChatCheck   = $('#add-to-chat-check');
 const agentError       = $('#agent-error');
@@ -709,12 +716,6 @@ function shortDir(dir) {
   return parts.length > 1 ? `…/${parts.slice(-2).join('/')}` : dir;
 }
 
-/** The `--model` family aliases the CLI resolves to "latest in that family"
- * server-side (per `claude --help`) — unlike a dated snapshot ID, this list
- * only grows when Anthropic ships a genuinely new model family, so the
- * model-select dropdowns below can offer it directly without going stale. */
-const MODEL_ALIASES = ['opus', 'sonnet', 'haiku', 'fable'];
-
 /**
  * Above this many tokens, an agent's most recent lastContextTokens (see its
  * docs in server/store/db.js) gets a visually distinct warning treatment in
@@ -725,25 +726,6 @@ const MODEL_ALIASES = ['opus', 'sonnet', 'haiku', 'fable'];
  * display threshold.
  */
 const USAGE_HIGH_CONTEXT_TOKENS = 300_000;
-
-/**
- * Turns a raw model ID the CLI reported (e.g. "claude-sonnet-5",
- * "claude-opus-4-1-20250805", or an older "claude-3-5-sonnet-20241022")
- * into a short display label ("Sonnet 5", "Opus 4.1", "Sonnet 3.5"). No
- * hardcoded model list — this app never picks a model itself, so a lookup
- * table would just go stale every time a new one ships. Falls back to the
- * raw ID verbatim if it doesn't match the family-name-plus-numbers shape.
- * @param {string} model
- * @returns {string}
- */
-function formatModelLabel(model) {
-  const familyMatch = model.match(/opus|sonnet|haiku|fable/i);
-  if (!familyMatch) return model;
-  const family = familyMatch[0][0].toUpperCase() + familyMatch[0].slice(1).toLowerCase();
-  const withoutDate = model.replace(/-\d{8}$/, '');
-  const version = withoutDate.split('-').filter((p) => /^\d+$/.test(p)).join('.');
-  return version ? `${family} ${version}` : family;
-}
 
 /**
  * Formats an agent's cost + last-turn context size for the agent panel's
@@ -835,16 +817,68 @@ function isSessionLimited(agent) {
 }
 
 /**
+ * The small badge naming which CLI an agent runs as. Shown only for an
+ * agent that isn't on the default provider, so a Claude-only setup looks
+ * exactly as it did before providers existed.
+ * @param {Agent} agent
+ * @param {string} className
+ * @returns {string} HTML, or '' for a default-provider agent
+ */
+function renderProviderBadge(agent, className) {
+  if (!agent.provider || agent.provider === DEFAULT_PROVIDER_ID) return '';
+  const display = providerDisplayFor(agent.provider);
+  return ` <span class="${className}" data-testid="${className}" title="${escHtml(t('agent.providerBadgeTitle', { provider: display.label }))}">${display.icon}</span>`;
+}
+
+/**
+ * Fits a model-family `<select>` (+ its companion "Custom" text input) to a
+ * provider: only that provider's own aliases are offered (see
+ * ProviderDisplay.modelAliases in agentProviders.js), or, for a provider
+ * with none, the model IDs it listed (see fetchProviderModels). With
+ * neither, the exact-ID input is shown on its own.
+ * @param {HTMLSelectElement} select
+ * @param {HTMLInputElement} customInput
+ * @param {import('./agentProviders.js').ProviderDisplay} display
+ * @param {string[]} [models] - Listed model IDs, for a provider with no aliases.
+ */
+function configureModelPicker(select, customInput, display, models = []) {
+  const aliases = display.modelAliases ?? [];
+  for (const option of [...select.options]) {
+    if (option.dataset.listed) option.remove();
+    else if (option.value === '') option.textContent = t('agentModal.modelDefaultOption', { provider: display.label });
+    else if (option.value !== 'custom') option.hidden = !aliases.includes(option.value);
+  }
+  const custom = select.querySelector('option[value="custom"]');
+  for (const model of display.modelAliases ? [] : models) {
+    const option = new Option(model, model);
+    option.dataset.listed = 'true';
+    select.insertBefore(option, custom);
+  }
+  select.hidden = !display.modelAliases && !models.length;
+  customInput.placeholder = t('agentModal.modelCustomPlaceholder', { model: display.modelExample });
+}
+
+/**
  * Prefills a model-family `<select>` (+ its companion "Custom" text input)
- * from an arbitrary modelOverride string — a known alias selects directly;
- * any other non-empty value (a full pinned model ID) falls into the Custom
- * option with that value shown in the companion input.
+ * from an arbitrary modelOverride string — a known alias or listed model
+ * selects directly; any other non-empty value (a full pinned model ID)
+ * falls into the Custom option with that value shown in the companion
+ * input. With nothing to pick from, it always uses the Custom input (see
+ * configureModelPicker).
  * @param {HTMLSelectElement} select
  * @param {HTMLInputElement} customInput
  * @param {string} value
+ * @param {import('./agentProviders.js').ProviderDisplay} display
+ * @param {string[]} [models] - Listed model IDs, for a provider with no aliases.
  */
-function setModelSelectValue(select, customInput, value) {
-  if (value === '' || MODEL_ALIASES.includes(value)) {
+function setModelSelectValue(select, customInput, value, display, models = []) {
+  configureModelPicker(select, customInput, display, models);
+  const known = display.modelAliases ?? models;
+  if (select.hidden) {
+    select.value = 'custom';
+    customInput.hidden = false;
+    customInput.value = value;
+  } else if (value === '' || known.includes(value)) {
     select.value = value;
     customInput.hidden = true;
     customInput.value = '';
@@ -853,6 +887,42 @@ function setModelSelectValue(select, customInput, value) {
     customInput.hidden = false;
     customInput.value = value;
   }
+}
+
+/**
+ * Model lists by provider and working directory, so reopening the form or
+ * the model switcher doesn't rerun the provider's CLI. A failed listing
+ * isn't kept, so the next open tries again.
+ * @type {Map<string, Promise<string[]>>}
+ */
+const providerModelsCache = new Map();
+
+/**
+ * The model IDs a provider with no aliases of its own can run in a working
+ * directory (GET /api/providers/:id/models), for its model picker. Empty
+ * when it has none to list or listing failed: the exact-ID input still
+ * takes any model.
+ * @param {string} providerId
+ * @param {string} [workingDir]
+ * @returns {Promise<string[]>}
+ */
+function fetchProviderModels(providerId, workingDir = '') {
+  if (providerDisplayFor(providerId).modelAliases) return Promise.resolve([]);
+  const key = `${providerId}\n${workingDir}`;
+  if (!providerModelsCache.has(key)) {
+    const query = workingDir ? `?workingDir=${encodeURIComponent(workingDir)}` : '';
+    providerModelsCache.set(key, fetch(`/api/providers/${encodeURIComponent(providerId)}/models${query}`)
+      .then((res) => (res.ok ? res.json() : { models: [] }))
+      .then(({ models }) => {
+        if (!models?.length) providerModelsCache.delete(key);
+        return models ?? [];
+      })
+      .catch(() => {
+        providerModelsCache.delete(key);
+        return [];
+      }));
+  }
+  return providerModelsCache.get(key);
 }
 
 /**
@@ -978,9 +1048,15 @@ let pendingConfirmResolve = null;
  * label baked into its markup, right for every other current caller).
  * @param {string} message
  * `textInput.list` names a `<datalist>` of suggestions for the field.
- * @param {{ checkboxLabel?: string, textInput?: { value?: string, placeholder?: string, list?: string }, modelInput?: { value?: string }, okLabel?: string }} [opts]
+ * `modelInput.provider` is the agent's provider id, which decides which
+ * model aliases are offered, or for a provider with none, which models are
+ * listed (in `modelInput.workingDir`, see fetchProviderModels).
+ * @param {{ checkboxLabel?: string, textInput?: { value?: string, placeholder?: string, list?: string }, modelInput?: { value?: string, provider?: string, workingDir?: string }, okLabel?: string }} [opts]
  * @returns {Promise<{ confirmed: boolean, checked: boolean, value: string }>}
  */
+/** Bumped per confirmDialog() call, so a late model list never lands in a later dialog. */
+let confirmDialogSeq = 0;
+
 function confirmDialog(message, opts = {}) {
   confirmMessage.textContent = message;
   confirmCheckboxRow.hidden = !opts.checkboxLabel;
@@ -996,8 +1072,19 @@ function confirmDialog(message, opts = {}) {
     else confirmTextInput.removeAttribute('list');
   }
   confirmModelRow.hidden = !opts.modelInput;
+  const confirmSeq = ++confirmDialogSeq;
   if (opts.modelInput) {
-    setModelSelectValue(confirmModelSelect, confirmModelCustomInput, opts.modelInput.value ?? '');
+    const { value = '', provider, workingDir } = opts.modelInput;
+    const display = providerDisplayFor(provider);
+    setModelSelectValue(confirmModelSelect, confirmModelCustomInput, value, display);
+    fetchProviderModels(display.id, workingDir).then((models) => {
+      if (confirmSeq !== confirmDialogSeq || confirmOverlay.hidden || !models.length) return;
+      // Keep whatever's been typed or picked since the dialog opened.
+      const current = getModelSelectValue(confirmModelSelect, confirmModelCustomInput);
+      const hadFocus = confirmModelRow.contains(document.activeElement);
+      setModelSelectValue(confirmModelSelect, confirmModelCustomInput, current, display, models);
+      if (hadFocus) (confirmModelSelect.hidden ? confirmModelCustomInput : confirmModelSelect).focus();
+    });
   }
   confirmOk.textContent = opts.okLabel ?? t('confirm.deleteBtn');
   confirmOk.classList.toggle('neutral', Boolean(opts.textInput || opts.modelInput));
@@ -1006,7 +1093,7 @@ function confirmDialog(message, opts = {}) {
     confirmTextInput.focus();
     confirmTextInput.select();
   } else if (opts.modelInput) {
-    confirmModelSelect.focus();
+    (confirmModelSelect.hidden ? confirmModelCustomInput : confirmModelSelect).focus();
   }
   return new Promise((resolve) => { pendingConfirmResolve = resolve; });
 }
@@ -1716,7 +1803,7 @@ async function restartAgent(agent) {
  */
 async function copySessionCommand(agent) {
   if (!agent.resumeId) return;
-  await navigator.clipboard.writeText(`claude --resume ${agent.resumeId}`);
+  await navigator.clipboard.writeText(providerDisplayFor(agent.provider).resumeCommand(agent.resumeId));
   const btn = document.querySelector(`[data-agent-id="${agent.id}"] .agent-session-btn`);
   if (!btn) return;
   const original = btn.textContent;
@@ -2449,6 +2536,7 @@ function buildMessageEl(msg) {
         ${msg.role === 'agent' ? `<button class="msg-mention-btn" data-testid="msg-mention-btn" title="${t('msg.mentionTitle', { name: escHtml(msg.authorName) })}">@</button>` : ''}
         ${agent?.dangerouslySkipPermissions ? `<span class="msg-author-yolo-badge" data-testid="msg-author-yolo-badge" title="${t('agent.yoloBadgeTitle')}">🔥</span>` : ''}
         ${agent?.chromeAccess ? `<span class="msg-author-chrome-badge" data-testid="msg-author-chrome-badge" title="${t('agent.chromeBadgeTitle')}">🌐</span>` : ''}
+        ${agent ? renderProviderBadge(agent, 'msg-author-provider-badge') : ''}
         ${agent ? `<span class="msg-author-dir" data-testid="msg-author-dir" title="${escHtml(agent.workingDir)}">${escHtml(shortDir(agent.workingDir))}</span>` : ''}
         <span class="msg-time" data-iso="${msg.createdAt}">${fmtTime(msg.createdAt)}</span>
         ${msg.role === 'agent' ? `
@@ -2892,6 +2980,7 @@ function createStreamingBubble(agentId, agentName, agentColor) {
         <span class="msg-author">${escHtml(agentName)}</span>
         ${agent?.dangerouslySkipPermissions ? `<span class="msg-author-yolo-badge" data-testid="msg-author-yolo-badge" title="${t('agent.yoloBadgeTitle')}">🔥</span>` : ''}
         ${agent?.chromeAccess ? `<span class="msg-author-chrome-badge" data-testid="msg-author-chrome-badge" title="${t('agent.chromeBadgeTitle')}">🌐</span>` : ''}
+        ${agent ? renderProviderBadge(agent, 'msg-author-provider-badge') : ''}
         ${agent ? `<span class="msg-author-dir" data-testid="msg-author-dir" title="${escHtml(agent.workingDir)}">${escHtml(shortDir(agent.workingDir))}</span>` : ''}
         <span class="msg-typing" data-testid="msg-typing">
           <span class="msg-status-text" data-testid="msg-status-text">${t('chat.respondingLabel')}</span>
@@ -3278,6 +3367,7 @@ function renderAgentPanel() {
   const members = chat.memberAgentIds.map(agentById).filter(Boolean);
   agentList.innerHTML = '';
   for (const agent of members) {
+    const display = providerDisplayFor(agent.provider);
     const hasUnseen = unseenOutsideFocusAgentIds.has(agent.id);
     const li = document.createElement('li');
     li.className = 'agent-item' + (hasUnseen ? ' has-unseen-outside-focus' : '') + (isAgentStreaming(agent.id) ? ' is-streaming' : '');
@@ -3286,15 +3376,15 @@ function renderAgentPanel() {
     li.innerHTML = `
       <div class="agent-avatar" style="background:${agentDisplayColor(agent.color)}">${agent.name[0].toUpperCase()}</div>
       <div class="agent-info">
-        <span class="agent-name" data-testid="agent-name">${escHtml(agent.name)}${hasUnseen ? ` <span class="agent-unseen-dot" data-testid="agent-unseen-dot" title="${t('agent.unseenOutsideFocusTitle', { name: agent.name })}"></span>` : ''}${agent.dangerouslySkipPermissions ? ` <span class="agent-yolo-badge" data-testid="agent-yolo-badge" title="${t('agent.yoloBadgeTitle')}">🔥</span>` : ''}${agent.isObserver ? ` <span class="agent-observer-badge" data-testid="agent-observer-badge" title="${t('agent.observerBadgeTitle')}">👁</span>` : ''}${agent.chromeAccess ? ` <span class="agent-chrome-badge" data-testid="agent-chrome-badge" title="${t('agent.chromeBadgeTitle')}">🌐</span>` : ''}</span>
+        <span class="agent-name" data-testid="agent-name">${escHtml(agent.name)}${hasUnseen ? ` <span class="agent-unseen-dot" data-testid="agent-unseen-dot" title="${t('agent.unseenOutsideFocusTitle', { name: agent.name })}"></span>` : ''}${agent.dangerouslySkipPermissions ? ` <span class="agent-yolo-badge" data-testid="agent-yolo-badge" title="${t('agent.yoloBadgeTitle')}">🔥</span>` : ''}${agent.isObserver ? ` <span class="agent-observer-badge" data-testid="agent-observer-badge" title="${t('agent.observerBadgeTitle')}">👁</span>` : ''}${agent.chromeAccess ? ` <span class="agent-chrome-badge" data-testid="agent-chrome-badge" title="${t('agent.chromeBadgeTitle')}">🌐</span>` : ''}${renderProviderBadge(agent, 'agent-provider-badge')}</span>
         <span class="agent-streaming" data-testid="agent-streaming"><span class="typing-dots" aria-hidden="true"><i></i><i></i><i></i></span> ${t('chat.respondingLabel')}</span>
         <span class="agent-dir" title="${escHtml(agent.workingDir)}">${escHtml(shortDir(agent.workingDir))}</span>
-        ${agent.model ? `<span class="agent-model" data-testid="agent-model" title="${t('agent.modelTitle', { model: escHtml(agent.model) })}">🧠 ${escHtml(formatModelLabel(agent.model))}</span>` : ''}
+        ${agent.model ? `<span class="agent-model" data-testid="agent-model" title="${t('agent.modelTitle', { model: escHtml(agent.model) })}">🧠 ${escHtml(display.formatModel(agent.model))}</span>` : ''}
         ${renderUsageBadge(agent)}
         ${renderBackgroundTasksBadge(agent)}
         ${isSessionLimited(agent) ? `<span class="agent-session-limit" data-testid="agent-session-limit" title="${escHtml(t('agent.sessionLimitBadgeTitle', { time: fmtFullTime(agent.sessionLimitResetAt) }))}">⏳ ${t('agent.sessionLimitBadgeLabel', { time: fmtScheduledTime(agent.sessionLimitResetAt) })}</span>` : ''}
         ${agent.note ? `<span class="agent-note" data-testid="agent-note" title="${escHtml(agent.note)}">📝 ${escHtml(agent.note)}</span>` : ''}
-        ${agent.resumeId ? `<button class="agent-session-btn" data-testid="agent-session-btn" title="${t('agent.copySessionTitle', { resumeId: escHtml(agent.resumeId) })}">⧉ ${agent.resumeId.slice(0, 8)}…</button>` : ''}
+        ${agent.resumeId ? `<button class="agent-session-btn" data-testid="agent-session-btn" title="${t('agent.copySessionTitle', { command: escHtml(display.resumeCommand(agent.resumeId)) })}">⧉ ${agent.resumeId.slice(0, 8)}…</button>` : ''}
       </div>
       <button class="agent-filter-btn${messageFilterAgentIds.has(agent.id) ? ' active' : ''}" data-testid="agent-filter-btn" title="${messageFilterAgentIds.has(agent.id) ? t('agent.filterOffTitle', { name: agent.name }) : t('agent.filterOnTitle', { name: agent.name })}">🔎</button>
       <div class="agent-menu-wrap">
@@ -3302,7 +3392,7 @@ function renderAgentPanel() {
         <ul class="agent-menu" data-testid="agent-menu" hidden>
           <li><button class="agent-note-btn" data-testid="agent-note-btn">🗒 ${agent.note ? t('agent.editNoteTitle') : t('agent.addNoteTitle')}</button></li>
           <li><button class="agent-model-btn" data-testid="agent-model-btn">🧠 ${t('agent.switchModelTitle')}</button></li>
-          <li><button class="agent-autocompact-btn" data-testid="agent-autocompact-btn">🗜️ ${agent.autocompactOverride ? t('agent.autocompactTitle', { value: agent.autocompactOverride }) : t('agent.autocompactDefaultTitle', { value: effectiveDefaultAutocompact() })}</button></li>
+          ${display.autocompact ? `<li><button class="agent-autocompact-btn" data-testid="agent-autocompact-btn">🗜️ ${agent.autocompactOverride ? t('agent.autocompactTitle', { value: agent.autocompactOverride }) : t('agent.autocompactDefaultTitle', { value: effectiveDefaultAutocompact() })}</button></li>` : ''}
           <li><button class="agent-open-folder-btn" data-testid="agent-open-folder-btn">📂 ${t('agent.openFolderTitle')}</button></li>
           <li><button class="agent-restart-btn" data-testid="agent-restart-btn" title="${t('agent.restartHint')}">🔄 ${t('agent.restartTitle')}</button></li>
           <li><button class="agent-remove-btn" data-testid="agent-remove-btn">× ${t('agent.removeFromChatTitle')}</button></li>
@@ -3320,7 +3410,7 @@ function renderAgentPanel() {
     });
     li.querySelector('.agent-note-btn').addEventListener('click', () => { closeAgentMenu(); openNoteModal(agent); });
     li.querySelector('.agent-model-btn').addEventListener('click', () => { closeAgentMenu(); changeAgentModel(agent); });
-    li.querySelector('.agent-autocompact-btn').addEventListener('click', () => { closeAgentMenu(); changeAgentAutocompact(agent); });
+    li.querySelector('.agent-autocompact-btn')?.addEventListener('click', () => { closeAgentMenu(); changeAgentAutocompact(agent); });
     li.querySelector('.agent-open-folder-btn').addEventListener('click', () => { closeAgentMenu(); openAgentFolder(agent); });
     li.querySelector('.agent-restart-btn').addEventListener('click', () => { closeAgentMenu(); restartAgent(agent); });
     li.querySelector('.agent-remove-btn').addEventListener('click', () => { closeAgentMenu(); removeMember(agent.id); });
@@ -3425,7 +3515,7 @@ async function handleNoteFormSubmit(e) {
 async function changeAgentModel(agent) {
   const { confirmed, value } = await confirmDialog(
     t('confirm.switchModel', { name: agent.name }),
-    { modelInput: { value: agent.modelOverride ?? '' }, okLabel: t('confirm.switchModelBtn') },
+    { modelInput: { value: agent.modelOverride ?? '', provider: agent.provider, workingDir: agent.workingDir }, okLabel: t('confirm.switchModelBtn') },
   );
   if (!confirmed) return;
   const modelOverride = value.trim();
@@ -4141,9 +4231,11 @@ function openModal() {
   agentNameInput.value = '';
   agentDirInput.value = '';
   agentResumeInput.value = '';
-  agentModelInput.value = '';
-  agentModelCustomInput.value = '';
-  agentModelCustomInput.hidden = true;
+  providerAvailability = new Map();
+  agentProviderSelect.value = DEFAULT_PROVIDER_ID;
+  renderProviderOptions();
+  applyProviderToAgentForm();
+  refreshProviderAvailability();
   agentAutocompactInput.value = '';
   agentAutocompactInput.placeholder = t('agentModal.autocompactPlaceholder', { value: effectiveDefaultAutocompact() });
   agentNoteInput.value = '';
@@ -4160,6 +4252,126 @@ function openModal() {
   renderRecentDirs();
   modalOverlay.hidden = false;
   agentNameInput.focus();
+}
+
+/**
+ * What GET /api/providers last said about each provider for the New Agent
+ * form's working directory, by provider id. Empty while the first check is
+ * in flight, when every provider is offered.
+ * @type {Map<string, { id: string, available: boolean, source: string, version?: string, error?: string }>}
+ */
+let providerAvailability = new Map();
+
+/** Bumped per check, so a slow answer for an older working directory is ignored. */
+let providerCheckSeq = 0;
+
+/**
+ * Asks the server which providers can run for the working directory
+ * currently in the New Agent form (a project can pin its own opencode), and
+ * re-renders the provider picker from the answer. A failed check leaves
+ * every provider offered: Create runs the same check anyway.
+ * @returns {Promise<void>}
+ */
+async function refreshProviderAvailability() {
+  const seq = ++providerCheckSeq;
+  const workingDir = agentDirInput.value.trim();
+  if (!providerAvailability.size) agentProviderStatus.textContent = t('agentModal.providerChecking');
+  try {
+    const res = await fetch(`/api/providers${workingDir ? `?workingDir=${encodeURIComponent(workingDir)}` : ''}`);
+    if (!res.ok || seq !== providerCheckSeq) return;
+    providerAvailability = new Map((await res.json()).map((result) => [result.id, result]));
+  } catch {
+    if (seq !== providerCheckSeq) return;
+    providerAvailability = new Map();
+  }
+  renderProviderOptions();
+  refreshAgentModelOptions();
+}
+
+/**
+ * Renders the provider picker: every provider, with one the server couldn't
+ * find disabled and marked as such. If that's the one picked, the picker
+ * moves to the first one that can run, since Create would only fail.
+ * @returns {void}
+ */
+function renderProviderOptions() {
+  const picked = agentProviderSelect.value || DEFAULT_PROVIDER_ID;
+  agentProviderSelect.innerHTML = PROVIDER_IDS.map((id) => {
+    const { label } = providerDisplayFor(id);
+    const missing = providerAvailability.get(id)?.available === false;
+    return `<option value="${id}"${missing ? ' disabled' : ''}>${escHtml(missing ? t('agentModal.providerNotFoundOption', { provider: label }) : label)}</option>`;
+  }).join('');
+  const runnable = (id) => providerAvailability.get(id)?.available !== false;
+  const next = runnable(picked) ? picked : PROVIDER_IDS.find(runnable);
+  agentProviderSelect.value = next ?? picked;
+  if (next && next !== picked) applyProviderToAgentForm();
+  renderProviderStatus();
+}
+
+/**
+ * The line under the provider picker: which binary the picked provider will
+ * run and where it was found, and how to install any provider that wasn't.
+ * @returns {void}
+ */
+function renderProviderStatus() {
+  if (!providerAvailability.size) return;
+  const lines = [];
+  const picked = providerAvailability.get(agentProviderSelect.value);
+  if (picked?.available) {
+    lines.push(t('agentModal.providerFound', {
+      provider: providerDisplayFor(picked.id).label,
+      version: picked.version ?? '',
+      source: t(`agentModal.providerSource.${picked.source}`),
+    }).replace(/\s+/g, ' '));
+  }
+  for (const result of providerAvailability.values()) {
+    if (!result.available) lines.push(t(`provider.${result.id}.notFound`));
+  }
+  agentProviderStatus.textContent = lines.join(' ');
+  modalSubmit.disabled = picked?.available === false;
+}
+
+/**
+ * Fits the New Agent form to the provider picked in it: its own model
+ * picker, resume command and default names, and only the options that
+ * apply to it (see ProviderDisplay in agentProviders.js). A generated name
+ * from another provider's pool is swapped for one of this provider's,
+ * since a name hints at what the agent runs as.
+ * @returns {void}
+ */
+function applyProviderToAgentForm() {
+  const display = providerDisplayFor(agentProviderSelect.value);
+  setModelSelectValue(agentModelInput, agentModelCustomInput, '', display);
+  agentModelHint.textContent = t(display.modelAliases ? 'agentModal.modelHint' : 'agentModal.modelIdHint');
+  refreshAgentModelOptions();
+  agentResumeHint.innerHTML = t('agentModal.resumeIdHint', { command: escHtml(display.resumeCommand('').trim()) });
+  agentAutocompactLabel.hidden = !display.autocompact;
+  if (!display.autocompact) agentAutocompactInput.value = '';
+  chromeAccessLabel.hidden = !display.chromeAccess;
+  if (!display.chromeAccess) chromeAccessCheck.checked = false;
+  const generatedElsewhere = PROVIDER_IDS.some((id) => id !== display.id && providerDisplayFor(id).namePool.includes(agentNameInput.value));
+  if (generatedElsewhere) agentNameInput.value = generateAgentName(display.id);
+  renderProviderStatus();
+}
+
+/** Bumped per model listing, so a slow answer for an older provider or directory is ignored. */
+let agentModelsSeq = 0;
+
+/**
+ * Offers the models the New Agent form's provider lists for its working
+ * directory (see fetchProviderModels), keeping whatever model is already
+ * picked or typed. Nothing changes for a provider with aliases of its own.
+ * @returns {Promise<void>}
+ */
+async function refreshAgentModelOptions() {
+  const seq = ++agentModelsSeq;
+  const display = providerDisplayFor(agentProviderSelect.value);
+  if (display.modelAliases) return;
+  const models = await fetchProviderModels(display.id, agentDirInput.value.trim());
+  if (seq !== agentModelsSeq || modalOverlay.hidden) return;
+  const current = getModelSelectValue(agentModelInput, agentModelCustomInput);
+  setModelSelectValue(agentModelInput, agentModelCustomInput, current, display, models);
+  agentModelHint.textContent = t(models.length ? 'agentModal.modelListHint' : 'agentModal.modelIdHint');
 }
 
 /** Most working directories to offer as one-click picks in the New Agent modal. */
@@ -4191,7 +4403,7 @@ function renderRecentDirs() {
     chip.className = 'chip';
     chip.title = dir;
     chip.textContent = shortDir(dir);
-    chip.addEventListener('click', () => { agentDirInput.value = dir; });
+    chip.addEventListener('click', () => { agentDirInput.value = dir; refreshProviderAvailability(); });
     agentDirRecent.appendChild(chip);
   }
 }
@@ -4229,12 +4441,11 @@ function renderColorGrid(container, selected, onSelect) {
 /**
  * Picks a default name for a new agent from its provider's pool (see
  * agentProviders.js), avoiding collisions with every existing agent's name.
- * The create form has no provider choice yet, so new agents are always the
- * default provider.
+ * Defaults to the provider picked in the New Agent form.
  * @param {string} [providerId]
  * @returns {string}
  */
-function generateAgentName(providerId = DEFAULT_PROVIDER_ID) {
+function generateAgentName(providerId = agentProviderSelect.value || DEFAULT_PROVIDER_ID) {
   return nameGeneratorFor(providerId)(agents.map((a) => a.name));
 }
 
@@ -4446,6 +4657,7 @@ async function handleAgentFormSubmit(e) {
   const workingDir = agentDirInput.value.trim();
   if (!name || !workingDir) return;
 
+  const provider = agentProviderSelect.value;
   const resumeId = agentResumeInput.value.trim() || undefined;
   const modelOverride = getModelSelectValue(agentModelInput, agentModelCustomInput) || undefined;
   const autocompactOverride = agentAutocompactInput.value.trim() || undefined;
@@ -4461,7 +4673,7 @@ async function handleAgentFormSubmit(e) {
     const res = await fetch('/api/agents', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, color: selectedColor, workingDir, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess, note, modelOverride, autocompactOverride }),
+      body: JSON.stringify({ name, color: selectedColor, workingDir, provider, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess, note, modelOverride, autocompactOverride }),
     });
     if (!res.ok) {
       const body = await res.json();
@@ -4625,7 +4837,7 @@ async function updateComposerDropdown() {
       testId: 'mention-item',
       html: `<span class="mention-avatar" style="background:${agentDisplayColor(agent.color)}">${agent.name[0]}</span>` +
         `<span class="mention-item-main">` +
-        `<span class="mention-item-name">${escHtml(agent.name)}${agent.dangerouslySkipPermissions ? ` <span class="msg-author-yolo-badge" title="${t('agent.yoloBadgeTitle')}">🔥</span>` : ''}${agent.chromeAccess ? ` <span class="msg-author-chrome-badge" title="${t('agent.chromeBadgeTitle')}">🌐</span>` : ''}</span>` +
+        `<span class="mention-item-name">${escHtml(agent.name)}${agent.dangerouslySkipPermissions ? ` <span class="msg-author-yolo-badge" title="${t('agent.yoloBadgeTitle')}">🔥</span>` : ''}${agent.chromeAccess ? ` <span class="msg-author-chrome-badge" title="${t('agent.chromeBadgeTitle')}">🌐</span>` : ''}${renderProviderBadge(agent, 'msg-author-provider-badge')}</span>` +
         `<span class="mention-item-desc">${escHtml(shortDir(agent.workingDir))}</span>` +
         (agent.note ? `<span class="mention-item-note">📝 ${escHtml(agent.note)}</span>` : '') +
         `</span>`,
@@ -5115,6 +5327,13 @@ agentForm.addEventListener('submit', handleAgentFormSubmit);
 agentNameGenerateBtn.addEventListener('click', () => {
   agentNameInput.value = generateAgentName();
 });
+agentProviderSelect.addEventListener('change', applyProviderToAgentForm);
+// A typed working directory is checked once typing pauses, not per keystroke.
+let providerCheckTimer = null;
+agentDirInput.addEventListener('input', () => {
+  clearTimeout(providerCheckTimer);
+  providerCheckTimer = setTimeout(refreshProviderAvailability, 400);
+});
 agentModelInput.addEventListener('change', () => {
   agentModelCustomInput.hidden = agentModelInput.value !== 'custom';
   if (agentModelInput.value === 'custom') agentModelCustomInput.focus();
@@ -5134,6 +5353,7 @@ browsePathInput.addEventListener('keydown', (e) => {
 browseSelect.addEventListener('click', () => {
   if (browseCurrentPath) agentDirInput.value = browseCurrentPath;
   closeFolderBrowser();
+  refreshProviderAvailability();
 });
 
 noteClose.addEventListener('click', closeNoteModal);

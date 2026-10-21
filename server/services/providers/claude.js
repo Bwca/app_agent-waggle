@@ -6,7 +6,9 @@
  * agentProcessManager.js, which now only owns process lifecycle.
  */
 
-import { basename } from 'path';
+import { basename, dirname } from 'path';
+import { commandPrefixes } from './shellCommands.js';
+import { ALLOWED_BUILTIN_COMMANDS } from '../commands.js';
 
 /** @typedef {import('./index.js').ToolCall} ToolCall */
 /** @typedef {import('./index.js').TurnAccumulator} TurnAccumulator */
@@ -475,17 +477,88 @@ function inspectEvent(event) {
   return signal;
 }
 
+/**
+ * The stdin line that starts one turn: a single stream-json user message.
+ * @param {import('../agentRunner.js').ContentBlock[]} content
+ * @returns {string}
+ */
+export function encodeTurn(content) {
+  return JSON.stringify({ type: 'user', message: { role: 'user', content } }) + '\n';
+}
+
+// Tool names whose permission_denials carry a real filesystem path
+// (tool_input.file_path) — these are the ones `extraAllowedPaths`/`--add-dir`
+// can actually authorize. Anything else (Bash, WebFetch, etc.) needs
+// allowedToolPatterns/`--allowedTools` instead — see the Agent typedef in
+// db.js for why the two grant mechanisms are kept separate.
+export const FILE_PATH_TOOLS = ['Write', 'Edit', 'Read', 'NotebookEdit'];
+
+/**
+ * Derives the scoped `--allowedTools` pattern(s) to grant for a denied,
+ * non-file-path tool call. Called server-side (handler.js's GRANT_PERMISSION
+ * handler, through claudeProvider.grantFor) on the same flattened "value" string the permission card already
+ * displays — the client never needs to know about tool-pattern syntax.
+ *
+ * For Bash: acceptEdits denies a chained command (`a && b`, `a; b`, `a | b`)
+ * outright as "multiple operations" — the denial's tool_input.command is the
+ * FULL chained string, not just whichever sub-command actually needed
+ * approval. Granting only a pattern derived from the first sub-command would
+ * silently fail to unblock a later sub-command that isn't first in the chain
+ * (this was caught by this feature's own regression test). So: split on
+ * shell chaining operators and derive one pattern per sub-command, each as
+ * its first two whitespace-separated tokens (e.g. "git add ..." -> "Bash(git
+ * add:*)"), confirmed empirically against the real `claude` CLI (v2.1.220).
+ * Two tokens rather than one keeps a grant from silently covering an entire
+ * tool (granting "git add" must never also authorize "git push --force") —
+ * granting every sub-command of a chain the user explicitly saw and approved
+ * is correct, since that's exactly what the permission card displayed.
+ *
+ * For any other non-file tool (WebFetch, WebSearch, Task, ...), Claude Code's
+ * permission patterns don't support this kind of sub-command scoping — the
+ * bare tool name is the only granted form.
+ * @param {string} toolName
+ * @param {string} value - The denial's flattened display value (a Bash
+ *   command string, or JSON.stringify(tool_input) for anything else)
+ * @returns {string[]}
+ */
+export function deriveToolPatterns(toolName, value) {
+  if (toolName !== 'Bash') return [toolName];
+  const patterns = commandPrefixes(value).map((prefix) => (prefix ? `Bash(${prefix}:*)` : 'Bash'));
+  return [...new Set(patterns)];
+}
+
+/**
+ * What granting one denied tool call authorizes: the containing directory
+ * for a file-path tool, since `--add-dir` on a file path is silently a
+ * no-op (confirmed empirically: --add-dir <file> still gets denied,
+ * --add-dir <dirname(file)> doesn't), else `--allowedTools` patterns.
+ * @param {string} toolName
+ * @param {string} value - The denial's flattened display value
+ * @returns {import('./index.js').PermissionGrant}
+ */
+function grantFor(toolName, value) {
+  if (FILE_PATH_TOOLS.includes(toolName)) return { path: dirname(value) };
+  return { patterns: deriveToolPatterns(toolName, value) };
+}
+
 /** @type {import('./index.js').AgentProvider} */
 export const claudeProvider = {
   id: 'claude',
   displayName: 'Claude',
   spawnCommand: (agent, options) => ({ command: CLAUDE_BIN, args: buildArgs(agent, options) }),
-  versionCommand: () => ({ command: CLAUDE_BIN, args: ['--version'] }),
-  encodeTurn: (content) => JSON.stringify({ type: 'user', message: { role: 'user', content } }) + '\n',
+  versionCommand: () => ({ command: CLAUDE_BIN, args: ['--version'], source: process.env.CLAUDE_BIN ? 'env' : 'path' }),
+  startTurn: (state, content) => state.write(encodeTurn(content)),
   parseLine,
-  createProcessState: () => ({ costSoFar: 0 }),
+  createProcessState: (_agent, { write }) => ({ write, costSoFar: 0 }),
   normalizeEvent: withPerTurnCost,
   inspectEvent,
   createTurnAccumulator,
   looksLikeAuthFailure: looksLikeMcpAuthFailure,
+  commandDirs: ['.claude/commands'],
+  builtinCommands: ALLOWED_BUILTIN_COMMANDS,
+  grantFor,
+  // Only Bash patterns can cover one another: a file-path tool's "pattern"
+  // is just its bare name, so comparing those would hide a second,
+  // different file's request.
+  overlappingPatterns: (toolName, value) => (toolName === 'Bash' ? deriveToolPatterns('Bash', value) : null),
 };

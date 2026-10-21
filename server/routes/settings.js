@@ -8,6 +8,7 @@ import { getUserDisplayName, setUserDisplayName, getUserColor, setUserColor, get
 import { killAgent, setAutocompactDefault } from '../services/agentProcessManager.js';
 import { AUTOCOMPACT_WINDOW } from '../services/providers/claude.js';
 import { normalizeAutocompact } from '../public/autocompact.js';
+import { providerDisplayFor } from '../public/agentProviders.js';
 import { SUPPORTED_LOCALES } from '../public/i18n/index.js';
 import { t } from '../i18n/t.js';
 
@@ -91,9 +92,10 @@ router.put('/', async (req, res) => {
     // that goes by the default gets restarted. killAgent waits out a turn
     // in progress first, and the next turn resumes the same session, so
     // nothing is cut off or forgotten. Not awaited: a busy agent's turn
-    // can run for minutes, and saving Settings shouldn't wait on it.
+    // can run for minutes, and saving Settings shouldn't wait on it. An
+    // agent whose CLI has no compaction window isn't affected at all.
     for (const agent of getAgents()) {
-      if (!agent.autocompactOverride) killAgent(agent.id);
+      if (!agent.autocompactOverride && providerDisplayFor(agent.provider).autocompact) killAgent(agent.id);
     }
   }
   res.json(currentSettings());

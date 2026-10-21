@@ -38,7 +38,7 @@ import {
 } from '../store/db.js';
 import { verifyProviderAvailable } from '../services/agentRunner.js';
 import { normalizeAutocompact } from '../public/autocompact.js';
-import { providerForAgent } from '../services/providers/index.js';
+import { DEFAULT_PROVIDER_ID, getProvider, hasProvider, providerForAgent } from '../services/providers/index.js';
 import { spawnForAgent, killAgent } from '../services/agentProcessManager.js';
 import { handleUserMessage, broadcast, postAgentRemovedNote, postAgentAddedNote } from '../ws/handler.js';
 import { t } from '../i18n/t.js';
@@ -280,12 +280,13 @@ export function registerTools(mcpServer, wss) {
   mcpServer.registerTool(
     'create_agent',
     {
-      description: 'Create a new agent (a persistent claude CLI process rooted at workingDir).',
+      description: 'Create a new agent (a persistent agent CLI process — claude by default — rooted at workingDir).',
       inputSchema: {
         name: z.string().min(1),
         color: z.string().min(1).describe('Hex color, e.g. "#6B8EAD"'),
         workingDir: z.string().min(1).describe('Absolute path to an existing project directory'),
-        resumeId: z.string().optional().describe('Existing claude --resume session id'),
+        provider: z.string().optional().describe(`Which CLI the agent runs as, e.g. "claude" or "opencode" (default "${DEFAULT_PROVIDER_ID}"). Creation-time only.`),
+        resumeId: z.string().optional().describe("Existing session id to resume, in the provider's own CLI"),
         dangerouslySkipPermissions: z.boolean().optional().describe('YOLO mode'),
         isObserver: z.boolean().optional(),
         chromeAccess: z.boolean().optional(),
@@ -294,13 +295,15 @@ export function registerTools(mcpServer, wss) {
         autocompactOverride: z.string().optional().describe('Context-compaction window: "auto", or 100k–1M tokens (e.g. "200k", "1M"). The Settings default applies when unset.'),
       },
     },
-    async ({ name, color, workingDir, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess, note, modelOverride, autocompactOverride }) => {
+    async ({ name, color, workingDir, provider: providerId = DEFAULT_PROVIDER_ID, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess, note, modelOverride, autocompactOverride }) => {
+      if (!hasProvider(providerId)) return fail(t('errors.unknownProvider', { provider: providerId }));
+      const provider = getProvider(providerId);
       const normalizedAutocompact = autocompactOverride ? normalizeAutocompact(autocompactOverride) : undefined;
       if (normalizedAutocompact === null) return fail(t('errors.invalidAutocompact'));
       if (!existsSync(workingDir)) return fail(t('errors.agentDirNotFound', { path: workingDir }));
-      const verified = await verifyProviderAvailable();
-      if (!verified.ok) return fail(t('errors.agentVerifyFailed', { message: verified.error }));
-      const data = { id: uuidv4(), name, color, workingDir };
+      const verified = await verifyProviderAvailable(provider, { workingDir });
+      if (!verified.ok) return fail(t('errors.agentVerifyFailed', { provider: provider.displayName, message: verified.error }));
+      const data = { id: uuidv4(), name, color, workingDir, provider: provider.id };
       if (resumeId) data.resumeId = resumeId;
       if (dangerouslySkipPermissions) data.dangerouslySkipPermissions = true;
       if (isObserver) data.isObserver = true;
@@ -338,8 +341,9 @@ export function registerTools(mcpServer, wss) {
 
       if (workingDir !== undefined && workingDir !== existing.workingDir) {
         if (!existsSync(workingDir)) return fail(t('errors.agentDirNotFound', { path: workingDir }));
-        const verified = await verifyProviderAvailable(providerForAgent(existing));
-        if (!verified.ok) return fail(t('errors.agentVerifyFailed', { message: verified.error }));
+        const provider = providerForAgent(existing);
+        const verified = await verifyProviderAvailable(provider, { workingDir });
+        if (!verified.ok) return fail(t('errors.agentVerifyFailed', { provider: provider.displayName, message: verified.error }));
       }
       const trimmedModelOverride = modelOverride !== undefined ? modelOverride.trim() : undefined;
       const normalizedAutocompact = autocompactOverride === undefined || autocompactOverride.trim() === ''

@@ -5,10 +5,10 @@
 
 import { WebSocket, WebSocketServer } from 'ws';
 import { v4 as uuidv4 } from 'uuid';
-import { dirname } from 'path';
 import { getChat, getAgent, getAgentChatId, getMessages, addMessage, grantAgentPath, grantAgentToolPattern, setAgentResumeIdIfUnset, recordContextClear, setAgentModel, setAgentSeenUntil, setAgentUsage, setAgentSessionLimitReset, getUserDisplayName, createScheduledMessage, getScheduledMessages } from '../store/db.js';
 import { parseResponders, extractMentionedAgents, parseSkillInvocation } from '../services/messageRouter.js';
-import { runAgentStream, FILE_PATH_TOOLS, deriveToolPatterns, dedupePermissionDenials } from '../services/agentRunner.js';
+import { runAgentStream, dedupePermissionDenials } from '../services/agentRunner.js';
+import { providerForAgent } from '../services/providers/index.js';
 import { killAgent, onBackgroundTurn, onBackgroundCompaction, onBackgroundError, onBackgroundUsage, onBackgroundStream, onBackgroundTasksChanged, getAllBackgroundTasks } from '../services/agentProcessManager.js';
 import { scheduleTimer } from '../services/scheduler.js';
 import { parseSessionLimitReset } from '../services/sessionLimitReset.js';
@@ -981,7 +981,7 @@ function makeBackgroundTurnHandler(agentId, wss) {
       chatId,
       agentId,
       message: agentMessage,
-      permissionDenials: dedupePermissionDenials(permissionDenials),
+      permissionDenials: dedupePermissionDenials(permissionDenials, providerForAgent(agent)),
       streamId,
     });
   };
@@ -1586,7 +1586,7 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, exc
         settleReply(agentMessage);
       }
 
-      const dedupedDenials = dedupePermissionDenials(permissionDenials);
+      const dedupedDenials = dedupePermissionDenials(permissionDenials, providerForAgent(agent));
       /** @type {AgentStreamEndEvent} */
       broadcast(wss, {
         type: 'AGENT_STREAM_END',
@@ -1717,17 +1717,12 @@ export function handleConnection(ws, _req, wss) {
       case 'GRANT_PERMISSION': {
         // { type: 'GRANT_PERMISSION', agentId: string, chatId?: string, toolName: string,
         //   value: string, autoContinue: boolean, outcomes?: PermissionOutcome[] }
-        // File-path-scoped tools (Write/Edit/Read/NotebookEdit) widen --add-dir
-        // scope; everything else (Bash, etc.) derives one or more
-        // --allowedTools patterns instead — --add-dir can't authorize a
-        // command. A chained Bash command derives a pattern per sub-command
-        // (see deriveToolPatterns), so grant each in turn.
-        //
-        // --add-dir requires an actual DIRECTORY — passing the exact file
-        // path (what the denial's tool_input.file_path is) is silently a
-        // no-op, confirmed empirically: --add-dir <file> still gets denied,
-        // --add-dir <dirname(file)> doesn't. So grant the file's containing
-        // directory, not the literal denied value.
+        // A grant is either a directory (extraAllowedPaths) or one or more
+        // tool patterns (allowedToolPatterns), as the agent's provider
+        // decides — for Claude, file-path tools widen --add-dir to the
+        // file's containing directory, and everything else derives
+        // --allowedTools patterns, one per sub-command of a chained Bash
+        // command (see providers/claude.js's grantFor).
         //
         // Persisted unconditionally, regardless of autoContinue — a grant
         // should stick the moment it's clicked, even if sibling rows in the
@@ -1738,11 +1733,16 @@ export function handleConnection(ws, _req, wss) {
         // row's auto-continue below only runs once this grant is fully in
         // place — see withPermissionLock.
         const granted = await withPermissionLock(event.agentId, async () => {
+          const existing = getAgent(event.agentId);
+          if (!existing) return null;
+          // What a grant means is the agent's provider's call — see
+          // AgentProvider.grantFor.
+          const grant = providerForAgent(existing).grantFor(event.toolName, event.value);
           let updated;
-          if (FILE_PATH_TOOLS.includes(event.toolName)) {
-            updated = await grantAgentPath(event.agentId, dirname(event.value));
+          if (grant.path) {
+            updated = await grantAgentPath(event.agentId, grant.path);
           } else {
-            for (const pattern of deriveToolPatterns(event.toolName, event.value)) {
+            for (const pattern of grant.patterns) {
               updated = await grantAgentToolPattern(event.agentId, pattern);
             }
           }

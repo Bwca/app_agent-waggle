@@ -14,6 +14,7 @@
  */
 
 import { claudeProvider } from './claude.js';
+import { opencodeProvider } from './opencode.js';
 import { DEFAULT_PROVIDER_ID } from '../../public/agentProviders.js';
 
 /**
@@ -29,22 +30,64 @@ import { DEFAULT_PROVIDER_ID } from '../../public/agentProviders.js';
  *   `autocompactDefault` is the compaction window from Settings (see
  *   setAutocompactDefault in agentProcessManager.js); a provider with no
  *   such notion ignores it.
- * @property {() => { command: string, args: string[] }} versionCommand - A
+ * @property {(agent?: { workingDir?: string }) => { command: string, args: string[], source: BinarySource }} versionCommand - A
  *   cheap no-model-call invocation, used to verify the binary resolves
- *   before an agent is created (see agentRunner.js's verifyProviderAvailable).
- * @property {(content: import('../agentRunner.js').ContentBlock[]) => string} encodeTurn -
- *   The exact stdin line (newline included) that starts one turn.
+ *   before an agent is created and to tell the New Agent form which
+ *   providers it can offer (see agentRunner.js's verifyProviderAvailable).
+ *   Gets the agent-to-be when there is one, for a provider that resolves its
+ *   binary per project, and says where the binary it chose came from.
+ * @property {(agent?: { workingDir?: string }) => { command: string, args: string[] }} [modelsCommand] -
+ *   Lists the model IDs an agent of this provider could run, one per line
+ *   on stdout, run in the agent-to-be's working directory since a project
+ *   can configure its own models (see agentRunner.js's listProviderModels).
+ *   For the model picker of a provider with no aliases of its own; one
+ *   without it only takes a typed model ID.
+ * @property {(state: object, content: import('../agentRunner.js').ContentBlock[]) => void | Promise<void>} startTurn -
+ *   Writes whatever starts one turn to the process, through the `write` the
+ *   state was created with. A provider whose protocol needs a handshake
+ *   before the first turn does it here, so it can be async; a rejection
+ *   fails the turn.
  * @property {(line: string) => object | null} parseLine
- * @property {() => object} createProcessState - Per-process scratch state
- *   the provider needs across events (e.g. a running-total baseline).
- * @property {(state: object, event: object) => object} normalizeEvent -
+ * @property {(agent: import('../../store/db.js').Agent, io: { write: (data: string) => void }) => object} createProcessState -
+ *   Per-process state the provider needs across events (e.g. a running-total
+ *   baseline, or a protocol connection), created once per spawn. `write`
+ *   goes to the process's stdin.
+ * @property {(state: object, event: object) => object | null} normalizeEvent -
  *   Runs on every parsed event, foreground or unsolicited, before anything
- *   else reads it.
+ *   else reads it. Null means the provider consumed the event itself (a
+ *   reply to its own handshake, say) and nothing else should see it.
  * @property {(event: object) => ProcessSignal} inspectEvent
  * @property {(callbacks?: { onChunk?: (text: string) => void, onStatus?: (status: string) => void }) => TurnAccumulator} createTurnAccumulator
  * @property {(text: string) => boolean} looksLikeAuthFailure - True when a
  *   finished turn's text means the process holds stale auth and should be
  *   respawned.
+ * @property {string[]} commandDirs - Where a project keeps its custom slash
+ *   commands (`*.md` files), relative to the agent's workingDir.
+ * @property {Set<string>} builtinCommands - The CLI's own commands that are
+ *   always offered and forwarded, whether or not its process reported them
+ *   (see commands.js's ALLOWED_BUILTIN_COMMANDS for Claude's).
+ * @property {(toolName: string, value: string) => PermissionGrant} grantFor -
+ *   What granting one denied tool call (as the permission card shows it:
+ *   a path, a command, or a JSON dump of its input) should store on the
+ *   agent. A grant always respawns the agent's process, so a provider reads
+ *   the stored grants back at spawn time, as flags or however it applies them.
+ * @property {(toolName: string, value: string) => string[] | null} overlappingPatterns -
+ *   The patterns a denial would grant, for a tool whose grants can cover one
+ *   another's (see agentRunner.js's dedupePermissionDenials), or null.
+ */
+
+/**
+ * Where a provider found its binary: an env var override, a copy pinned by
+ * the agent's own project, PATH, or the CLI's own install location in the
+ * user's home directory.
+ * @typedef {'env' | 'project' | 'path' | 'home'} BinarySource
+ */
+
+/**
+ * Exactly one of the two is set.
+ * @typedef {Object} PermissionGrant
+ * @property {string} [path] - A directory to add to agent.extraAllowedPaths.
+ * @property {string[]} [patterns] - Patterns to add to agent.allowedToolPatterns.
  */
 
 /**
@@ -154,7 +197,7 @@ import { DEFAULT_PROVIDER_ID } from '../../public/agentProviders.js';
 export { DEFAULT_PROVIDER_ID };
 
 /** @type {Map<string, AgentProvider>} */
-const providers = new Map([[claudeProvider.id, claudeProvider]]);
+const providers = new Map([claudeProvider, opencodeProvider].map((provider) => [provider.id, provider]));
 
 /**
  * @param {string} [id]
@@ -167,10 +210,25 @@ export function getProvider(id = DEFAULT_PROVIDER_ID) {
 }
 
 /**
- * The provider an agent runs as. Agents carry no `provider` field yet —
- * every one is Claude — so this falls back to the default until that
- * column exists.
- * @param {import('../../store/db.js').Agent & { provider?: string }} agent
+ * Every registered provider, the default first.
+ * @returns {AgentProvider[]}
+ */
+export function listProviders() {
+  return [...providers.values()];
+}
+
+/**
+ * @param {string} id
+ * @returns {boolean}
+ */
+export function hasProvider(id) {
+  return providers.has(id);
+}
+
+/**
+ * The provider an agent runs as. Every stored agent has one; the fallback
+ * is for an agent-shaped object that doesn't (a test fixture, say).
+ * @param {import('../../store/db.js').Agent} agent
  * @returns {AgentProvider}
  */
 export function providerForAgent(agent) {

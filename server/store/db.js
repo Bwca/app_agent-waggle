@@ -13,6 +13,7 @@ import { existsSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { logger } from '../logger.js';
+import { DEFAULT_PROVIDER_ID } from '../public/agentProviders.js';
 
 const log = logger.child({ component: 'db' });
 
@@ -62,7 +63,11 @@ function transaction(fn) {
  * @property {string} name - Display name
  * @property {string} color - Hex color string e.g. "#6B8EAD"
  * @property {string} workingDir - Absolute path to the agent's project directory
- * @property {string} [resumeId] - Optional claude --resume conversation ID
+ * @property {string} provider - Which CLI this agent runs as (an id from
+ *   services/providers/index.js's registry, e.g. "claude"). Set at
+ *   creation only: a session belongs to one CLI, so switching would strand it.
+ * @property {string} [resumeId] - Optional --resume session ID for the
+ *   agent's CLI (an ACP session id for opencode)
  * @property {string[]} [extraAllowedPaths] - Additional directories granted via
  *   GRANT_PERMISSION for file-path-scoped tools (Write/Edit/Read/NotebookEdit),
  *   passed to `claude` as `--add-dir`.
@@ -276,6 +281,7 @@ CREATE TABLE IF NOT EXISTS agents (
   name TEXT NOT NULL,
   color TEXT NOT NULL,
   working_dir TEXT NOT NULL,
+  provider TEXT NOT NULL DEFAULT '${DEFAULT_PROVIDER_ID}',
   resume_id TEXT,
   extra_allowed_paths TEXT NOT NULL DEFAULT '[]',
   allowed_tool_patterns TEXT NOT NULL DEFAULT '[]',
@@ -483,6 +489,19 @@ function migrateAgentsAutocompactOverride() {
     .some((col) => col.name === 'autocompact_override');
   if (hasColumn) return;
   db.exec('ALTER TABLE agents ADD COLUMN autocompact_override TEXT');
+}
+
+/**
+ * Adds the `provider` column to `agents` if it's missing, same reasoning as
+ * migrateAgentsAllowedToolPatterns above. Every agent from before it existed
+ * ran as Claude, the default.
+ * @returns {void}
+ */
+function migrateAgentsProvider() {
+  const hasColumn = db.prepare("PRAGMA table_info(agents)").all()
+    .some((col) => col.name === 'provider');
+  if (hasColumn) return;
+  db.exec(`ALTER TABLE agents ADD COLUMN provider TEXT NOT NULL DEFAULT '${DEFAULT_PROVIDER_ID}'`);
 }
 
 /**
@@ -699,6 +718,7 @@ function rowToAgent(row) {
     name: row.name,
     color: row.color,
     workingDir: row.working_dir,
+    provider: row.provider,
     createdAt: row.created_at,
   };
   if (row.resume_id) agent.resumeId = row.resume_id;
@@ -867,6 +887,7 @@ export async function loadDb() {
   migrateAgentsLastKnownModel();
   migrateAgentsModelOverride();
   migrateAgentsAutocompactOverride();
+  migrateAgentsProvider();
   migrateAgentsUsageStats();
   migrateAgentsLastTurnCost();
   migrateAgentsSessionLimitReset();
@@ -906,16 +927,17 @@ export function getAgent(id) {
 
 /**
  * Creates and persists a new agent.
- * @param {Omit<Agent, 'createdAt'>} data
+ * @param {Omit<Agent, 'createdAt' | 'provider'> & { provider?: string }} data - provider
+ *   defaults to DEFAULT_PROVIDER_ID.
  * @returns {Promise<Agent>}
  */
 export async function createAgent(data) {
   const createdAt = new Date().toISOString();
   db.prepare(`
-    INSERT INTO agents (id, name, color, working_dir, resume_id, extra_allowed_paths, allowed_tool_patterns, dangerously_skip_permissions, is_observer, chrome_access, note, model_override, autocompact_override, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO agents (id, name, color, working_dir, provider, resume_id, extra_allowed_paths, allowed_tool_patterns, dangerously_skip_permissions, is_observer, chrome_access, note, model_override, autocompact_override, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    data.id, data.name, data.color, data.workingDir,
+    data.id, data.name, data.color, data.workingDir, data.provider ?? DEFAULT_PROVIDER_ID,
     data.resumeId ?? null, JSON.stringify(data.extraAllowedPaths ?? []),
     JSON.stringify(data.allowedToolPatterns ?? []), data.dangerouslySkipPermissions ? 1 : 0,
     data.isObserver ? 1 : 0, data.chromeAccess ? 1 : 0, data.note ?? null, data.modelOverride ?? null, data.autocompactOverride ?? null, createdAt

@@ -20,52 +20,6 @@ import { runTurn } from './agentProcessManager.js';
 import { getProvider } from './providers/index.js';
 import { t } from '../i18n/t.js';
 
-// Tool names whose permission_denials carry a real filesystem path
-// (tool_input.file_path) — these are the ones `extraAllowedPaths`/`--add-dir`
-// can actually authorize. Anything else (Bash, WebFetch, etc.) needs
-// allowedToolPatterns/`--allowedTools` instead — see the Agent typedef in
-// db.js for why the two grant mechanisms are kept separate.
-export const FILE_PATH_TOOLS = ['Write', 'Edit', 'Read', 'NotebookEdit'];
-
-/**
- * Derives the scoped `--allowedTools` pattern(s) to grant for a denied,
- * non-file-path tool call. Called server-side (handler.js's GRANT_PERMISSION
- * handler) on the same flattened "value" string the permission card already
- * displays — the client never needs to know about tool-pattern syntax.
- *
- * For Bash: acceptEdits denies a chained command (`a && b`, `a; b`, `a | b`)
- * outright as "multiple operations" — the denial's tool_input.command is the
- * FULL chained string, not just whichever sub-command actually needed
- * approval. Granting only a pattern derived from the first sub-command would
- * silently fail to unblock a later sub-command that isn't first in the chain
- * (this was caught by this feature's own regression test). So: split on
- * shell chaining operators and derive one pattern per sub-command, each as
- * its first two whitespace-separated tokens (e.g. "git add ..." -> "Bash(git
- * add:*)"), confirmed empirically against the real `claude` CLI (v2.1.220).
- * Two tokens rather than one keeps a grant from silently covering an entire
- * tool (granting "git add" must never also authorize "git push --force") —
- * granting every sub-command of a chain the user explicitly saw and approved
- * is correct, since that's exactly what the permission card displayed.
- *
- * For any other non-file tool (WebFetch, WebSearch, Task, ...), Claude Code's
- * permission patterns don't support this kind of sub-command scoping — the
- * bare tool name is the only granted form.
- * @param {string} toolName
- * @param {string} value - The denial's flattened display value (a Bash
- *   command string, or JSON.stringify(tool_input) for anything else)
- * @returns {string[]}
- */
-export function deriveToolPatterns(toolName, value) {
-  if (toolName !== 'Bash') return [toolName];
-  const subCommands = value.split(/&&|\|\||;|\|/).map((s) => s.trim()).filter(Boolean);
-  const patterns = subCommands.map((cmd) => {
-    const tokens = cmd.split(/\s+/).filter(Boolean);
-    const prefix = tokens.slice(0, 2).join(' ');
-    return prefix ? `Bash(${prefix}:*)` : 'Bash';
-  });
-  return [...new Set(patterns)];
-}
-
 /**
  * Narrows a turn's raw permission_denials down to genuinely distinct asks.
  * The model can retry a blocked Bash action more than once in the same turn
@@ -85,23 +39,29 @@ export function deriveToolPatterns(toolName, value) {
  * duplicates are still caught for every tool, matching the client's own
  * dedupe (buildPermissionCard) — this just adds the Bash-specific
  * subset case on top, since only the server knows CLI pattern syntax.
+ *
+ * Which tools have patterns worth comparing, and what they are, is the
+ * provider's call (AgentProvider.overlappingPatterns) — this only knows
+ * that a denial whose patterns are all already covered adds nothing.
  * @param {PermissionDenial[]} denials
+ * @param {import('./providers/index.js').AgentProvider} [provider] - The
+ *   provider of the agent these denials came from.
  * @returns {PermissionDenial[]}
  */
-export function dedupePermissionDenials(denials) {
+export function dedupePermissionDenials(denials, provider = getProvider()) {
   const kept = [];
   const seenExact = new Set();
-  const coveredBashPatterns = new Set();
+  const coveredPatterns = new Set();
 
   for (const denial of denials) {
     const value = String(denial.tool_input?.file_path ?? denial.tool_input?.command ?? JSON.stringify(denial.tool_input));
     const exactKey = `${denial.tool_name}::${value}`;
     if (seenExact.has(exactKey)) continue;
 
-    if (denial.tool_name === 'Bash') {
-      const patterns = deriveToolPatterns('Bash', value);
-      if (patterns.length && patterns.every((p) => coveredBashPatterns.has(p))) continue;
-      for (const p of patterns) coveredBashPatterns.add(p);
+    const patterns = provider.overlappingPatterns(denial.tool_name, value);
+    if (patterns) {
+      if (patterns.length && patterns.every((p) => coveredPatterns.has(p))) continue;
+      for (const p of patterns) coveredPatterns.add(p);
     }
 
     seenExact.add(exactKey);
@@ -224,13 +184,62 @@ export function runAgentStream({ agent, content, onChunk, onStatus, signal }) {
  * blocking creation with a real, costly round-trip.
  *
  * @param {import('./providers/index.js').AgentProvider} [provider]
- * @returns {Promise<{ ok: true } | { ok: false, error: string }>}
+ * @param {{ workingDir?: string }} [agent] - The agent-to-be, for a provider
+ *   that resolves its binary per project (see AgentProvider.versionCommand).
+ * @returns {Promise<{ ok: true, version: string, source: import('./providers/index.js').BinarySource } | { ok: false, error: string, source: import('./providers/index.js').BinarySource }>}
+ *   `version` is the binary's own first line of --version output.
  */
-export async function verifyProviderAvailable(provider = getProvider()) {
-  const { command, args } = provider.versionCommand();
+export async function verifyProviderAvailable(provider = getProvider(), agent = undefined) {
+  const { command, args, source } = provider.versionCommand(agent);
   return new Promise((resolve) => {
-    const child = spawn(command, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
     let stderr = '';
+    child.stdout.setEncoding('utf-8');
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.setEncoding('utf-8');
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+
+    child.on('error', (err) => {
+      resolve({ ok: false, source, error: t('errors.agentSpawnFailed', { provider: provider.displayName, message: err.message }) });
+    });
+    child.on('close', (code) => {
+      if (code !== 0) {
+        resolve({ ok: false, source, error: stderr.trim() || t('errors.agentExitCode', { provider: provider.displayName, code }) });
+        return;
+      }
+      resolve({ ok: true, source, version: stdout.trim().split('\n')[0] ?? '' });
+    });
+  });
+}
+
+/** How long a provider gets to list its models before the picker gives up on it. */
+const LIST_MODELS_TIMEOUT_MS = 20_000;
+
+/**
+ * Lists the model IDs a provider can run, via its modelsCommand, in the
+ * agent-to-be's working directory (a project can configure its own
+ * models). No model call. For the model picker only: a model typed by hand
+ * is still accepted, so a failure here just means no list to pick from.
+ *
+ * @param {import('./providers/index.js').AgentProvider} provider
+ * @param {{ workingDir?: string }} [agent]
+ * @returns {Promise<{ ok: true, models: string[] } | { ok: false, error: string }>}
+ *   `ok: false` too for a provider with no modelsCommand.
+ */
+export async function listProviderModels(provider, agent = undefined) {
+  if (!provider.modelsCommand) return { ok: false, error: `${provider.displayName} has no model list` };
+  const { command, args } = provider.modelsCommand(agent);
+  return new Promise((resolve) => {
+    const child = spawn(command, args, {
+      cwd: agent?.workingDir,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: LIST_MODELS_TIMEOUT_MS,
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf-8');
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
     child.stderr.setEncoding('utf-8');
     child.stderr.on('data', (chunk) => { stderr += chunk; });
 
@@ -242,7 +251,18 @@ export async function verifyProviderAvailable(provider = getProvider()) {
         resolve({ ok: false, error: stderr.trim() || t('errors.agentExitCode', { provider: provider.displayName, code }) });
         return;
       }
-      resolve({ ok: true });
+      resolve({ ok: true, models: parseModelList(stdout) });
     });
   });
+}
+
+/**
+ * One model ID per line; anything with whitespace in it is a stray message,
+ * not an ID.
+ * @param {string} stdout
+ * @returns {string[]} Deduplicated, in the CLI's own order.
+ */
+export function parseModelList(stdout) {
+  const lines = stdout.split('\n').map((line) => line.trim()).filter((line) => line && !/\s/.test(line));
+  return [...new Set(lines)];
 }

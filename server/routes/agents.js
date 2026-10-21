@@ -11,7 +11,7 @@ import { existsSync } from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import { getAgents, getAgent, getAgentChatId, getChat, createAgent, updateAgent, deleteAgent } from '../store/db.js';
 import { verifyProviderAvailable } from '../services/agentRunner.js';
-import { providerForAgent } from '../services/providers/index.js';
+import { DEFAULT_PROVIDER_ID, getProvider, hasProvider, providerForAgent } from '../services/providers/index.js';
 import { killAgent, getAgentSkills, spawnForAgent } from '../services/agentProcessManager.js';
 import { listAgentCommands, mergeSkills } from '../services/commands.js';
 import { postAgentRemovedNote } from '../ws/handler.js';
@@ -58,7 +58,10 @@ export default function createAgentsRouter(wss) {
    * @param {string} req.body.name - Agent display name
    * @param {string} req.body.color - Hex color e.g. "#6B8EAD"
    * @param {string} req.body.workingDir - Absolute path to project directory
-   * @param {string} [req.body.resumeId] - Optional claude --resume conversation ID
+   * @param {string} [req.body.provider] - Which CLI the agent runs as (see
+   *   services/providers/index.js); the default provider when unset.
+   *   Creation-time only.
+   * @param {string} [req.body.resumeId] - Optional --resume session ID for that CLI
    * @param {boolean} [req.body.dangerouslySkipPermissions] - "YOLO mode", opt-in
    * @param {boolean} [req.body.isObserver] - Observer mode, opt-in (creation-time only in the UI)
    * @param {boolean} [req.body.chromeAccess] - Browser access via the Claude in
@@ -76,10 +79,14 @@ export default function createAgentsRouter(wss) {
    *   default applies when unset.
    */
   router.post('/', async (req, res) => {
-    const { name, color, workingDir, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess, note, modelOverride, autocompactOverride } = req.body;
+    const { name, color, workingDir, provider: providerId = DEFAULT_PROVIDER_ID, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess, note, modelOverride, autocompactOverride } = req.body;
     if (!name || !color || !workingDir) {
       return res.status(400).json({ error: t('errors.agentFieldsRequired') });
     }
+    if (!hasProvider(providerId)) {
+      return res.status(400).json({ error: t('errors.unknownProvider', { provider: providerId }) });
+    }
+    const provider = getProvider(providerId);
     const normalizedAutocompact = autocompactOverride ? normalizeAutocompact(autocompactOverride) : undefined;
     if (normalizedAutocompact === null) {
       return res.status(400).json({ error: t('errors.invalidAutocompact') });
@@ -87,11 +94,11 @@ export default function createAgentsRouter(wss) {
     if (!existsSync(workingDir)) {
       return res.status(400).json({ error: t('errors.agentDirNotFound', { path: workingDir }) });
     }
-    const verified = await verifyProviderAvailable();
+    const verified = await verifyProviderAvailable(provider, { workingDir });
     if (!verified.ok) {
-      return res.status(400).json({ error: t('errors.agentVerifyFailed', { message: verified.error }) });
+      return res.status(400).json({ error: t('errors.agentVerifyFailed', { provider: provider.displayName, message: verified.error }) });
     }
-    const data = { id: uuidv4(), name, color, workingDir };
+    const data = { id: uuidv4(), name, color, workingDir, provider: provider.id };
     if (resumeId) data.resumeId = resumeId;
     if (dangerouslySkipPermissions) data.dangerouslySkipPermissions = true;
     if (isObserver) data.isObserver = true;
@@ -150,9 +157,10 @@ export default function createAgentsRouter(wss) {
       if (!existsSync(workingDir)) {
         return res.status(400).json({ error: t('errors.agentDirNotFound', { path: workingDir }) });
       }
-      const verified = await verifyProviderAvailable(providerForAgent(existing));
+      const provider = providerForAgent(existing);
+      const verified = await verifyProviderAvailable(provider, { workingDir });
       if (!verified.ok) {
-        return res.status(400).json({ error: t('errors.agentVerifyFailed', { message: verified.error }) });
+        return res.status(400).json({ error: t('errors.agentVerifyFailed', { provider: provider.displayName, message: verified.error }) });
       }
     }
     // Trimmed once, reused for both the write below and the flagsChanged
@@ -222,15 +230,17 @@ export default function createAgentsRouter(wss) {
   /**
    * GET /api/agents/:id/commands
    * Lists the agent's slash commands for the composer's "/" autocomplete:
-   * its project-level custom commands (.claude/commands/*.md in its
-   * workingDir) merged with the built-in/marketplace/plugin skills its own
-   * live process actually reported having (empty until that process has
-   * spawned at least once — see getAgentSkills).
+   * its project-level custom commands (*.md files in its provider's
+   * command directories under its workingDir, .claude/commands for Claude)
+   * merged with the built-in/marketplace/plugin skills its own live process
+   * actually reported having (empty until that process has spawned at
+   * least once — see getAgentSkills).
    */
   router.get('/:id/commands', (req, res) => {
     const agent = getAgent(req.params.id);
     if (!agent) return res.status(404).json({ error: t('errors.agentNotFound') });
-    res.json(mergeSkills(listAgentCommands(agent.workingDir), getAgentSkills(agent.id)));
+    const provider = providerForAgent(agent);
+    res.json(mergeSkills(listAgentCommands(agent.workingDir, provider.commandDirs), getAgentSkills(agent.id), provider.builtinCommands));
   });
 
   /**
