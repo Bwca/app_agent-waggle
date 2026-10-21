@@ -37,7 +37,7 @@ describe('opencode provider', () => {
 
   test('spawns `opencode acp` in the agent\'s working directory', () => {
     const { args } = opencodeProvider.spawnCommand(AGENT);
-    assert.deepEqual(args, ['acp', '--cwd', '/work']);
+    assert.deepEqual(args, ['acp']);
   });
 
   test('handshakes on the first turn, then prompts the new session', async () => {

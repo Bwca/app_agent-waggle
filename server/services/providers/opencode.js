@@ -592,7 +592,7 @@ function grantFor(toolName, value) {
 export const opencodeProvider = {
   id: 'opencode',
   displayName: 'opencode',
-  spawnCommand: (agent) => ({ command: resolveBin(agent.workingDir), args: ['acp', '--cwd', agent.workingDir] }),
+  spawnCommand: (agent) => ({ command: resolveBin(agent.workingDir), args: ['acp'] }),
   versionCommand: (agent) => {
     const { command, source } = locateBin(agent?.workingDir);
     return { command, args: ['--version'], source };
