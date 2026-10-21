@@ -10,7 +10,8 @@ import assert from 'node:assert/strict';
 import { startServer, stopServer, resetData, TEST_PORT } from '../helpers/server.js';
 import { launchBrowser, closeBrowser, openPage, closePage, tid, createChat, createAgent } from '../helpers/browser.js';
 import { agentDir, cleanupAgentDirs } from '../helpers/fixtures.js';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 /**
@@ -196,5 +197,104 @@ describe('Agent providers that are not installed', () => {
     );
     await page.select(tid('agent-provider-select'), 'opencode');
     assert.match(await page.$eval(tid('agent-provider-status'), (el) => el.textContent), /opencode 9\.9\.9 · pinned by this project/);
+  });
+});
+
+describe('Picking an opencode model from its list', () => {
+  /** @type {import('puppeteer').Page} */
+  let page;
+  /** Holds the fake opencode, which lists two models, plus one more in a project with its own opencode.json. */
+  const binDir = mkdtempSync(join(tmpdir(), 'clauhort-e2e-fake-opencode-'));
+
+  before(async () => {
+    const bin = join(binDir, 'opencode');
+    writeFileSync(bin, [
+      '#!/bin/sh',
+      'if [ "$1" = models ]; then',
+      '  printf "ollama/local-agent\\nopencode/big-pickle\\n"',
+      '  [ -f opencode.json ] && echo project/own-model',
+      'fi',
+      'exit 0',
+      '',
+    ].join('\n'), { mode: 0o755 });
+    await startServer({ OPENCODE_BIN: bin });
+    await launchBrowser();
+  });
+
+  after(async () => {
+    await closeBrowser();
+    await stopServer();
+    rmSync(binDir, { recursive: true, force: true });
+  });
+
+  beforeEach(async () => {
+    await resetData();
+    if (page) await closePage();
+    page = await openPage();
+    await createChat(page, 'Provider Chat');
+  });
+
+  afterEach(() => {
+    cleanupAgentDirs();
+  });
+
+  /**
+   * The model picker's offered option values, once it lists at least `count` models.
+   * @param {string} selectId
+   * @param {number} count
+   * @returns {Promise<string[]>}
+   */
+  async function listedModels(selectId, count) {
+    await page.waitForFunction(
+      (selector, n) => document.querySelectorAll(`${selector} option[data-listed]`).length >= n,
+      { timeout: 5000 },
+      tid(selectId),
+      count,
+    );
+    return page.$$eval(`${tid(selectId)} option`, (els) => els.filter((el) => !el.hidden).map((el) => el.value));
+  }
+
+  test('the New Agent form lists the project\'s models, and the pick is stored', async () => {
+    const dir = agentDir('listed');
+    writeFileSync(join(dir, 'opencode.json'), '{}');
+    await openNewAgentModal(page);
+    await page.select(tid('agent-provider-select'), 'opencode');
+    await page.type(tid('agent-name-input'), 'Opal');
+    await page.type(tid('agent-dir-input'), dir);
+
+    assert.deepEqual(await listedModels('agent-model-select', 3), ['', 'ollama/local-agent', 'opencode/big-pickle', 'project/own-model', 'custom']);
+    assert.equal(await isShown(page, tid('agent-model-custom-input')), false);
+    assert.match(await page.$eval(`${tid('agent-model-select')} option[value=""]`, (el) => el.textContent), /let opencode choose/);
+
+    await page.select(tid('agent-model-select'), 'project/own-model');
+    await page.click(tid('modal-submit'));
+    await page.waitForFunction(async (port) => {
+      const [agent] = await (await fetch(`http://localhost:${port}/api/agents`)).json();
+      return agent?.modelOverride === 'project/own-model';
+    }, { timeout: 5000 }, TEST_PORT);
+  });
+
+  test('switching an opencode agent\'s model offers its list, with its current model picked', async () => {
+    await createAgent(page, { name: 'Opal', workingDir: agentDir('opal'), provider: 'opencode' });
+    await page.waitForSelector(tid('agent-item'), { timeout: 5000 });
+    await fetch(`http://localhost:${TEST_PORT}/api/agents/${(await (await fetch(`http://localhost:${TEST_PORT}/api/agents`)).json())[0].id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ modelOverride: 'opencode/big-pickle' }),
+    });
+    await page.reload();
+    await page.waitForSelector(tid('agent-item'), { timeout: 5000 });
+
+    await page.click(tid('agent-menu-btn'));
+    await page.click(tid('agent-model-btn'));
+    assert.deepEqual(await listedModels('confirm-model-select', 2), ['', 'ollama/local-agent', 'opencode/big-pickle', 'custom']);
+    assert.equal(await page.$eval(tid('confirm-model-select'), (el) => el.value), 'opencode/big-pickle');
+
+    await page.select(tid('confirm-model-select'), 'ollama/local-agent');
+    await page.click(tid('confirm-ok'));
+    await page.waitForFunction(async (port) => {
+      const [agent] = await (await fetch(`http://localhost:${port}/api/agents`)).json();
+      return agent?.modelOverride === 'ollama/local-agent';
+    }, { timeout: 5000 }, TEST_PORT);
   });
 });

@@ -833,39 +833,52 @@ function renderProviderBadge(agent, className) {
 /**
  * Fits a model-family `<select>` (+ its companion "Custom" text input) to a
  * provider: only that provider's own aliases are offered (see
- * ProviderDisplay.modelAliases in agentProviders.js), and a provider with
- * none gets the exact-ID input on its own.
+ * ProviderDisplay.modelAliases in agentProviders.js), or, for a provider
+ * with none, the model IDs it listed (see fetchProviderModels). With
+ * neither, the exact-ID input is shown on its own.
  * @param {HTMLSelectElement} select
  * @param {HTMLInputElement} customInput
  * @param {import('./agentProviders.js').ProviderDisplay} display
+ * @param {string[]} [models] - Listed model IDs, for a provider with no aliases.
  */
-function configureModelPicker(select, customInput, display) {
+function configureModelPicker(select, customInput, display, models = []) {
   const aliases = display.modelAliases ?? [];
-  for (const option of select.options) {
-    if (option.value !== '' && option.value !== 'custom') option.hidden = !aliases.includes(option.value);
+  for (const option of [...select.options]) {
+    if (option.dataset.listed) option.remove();
+    else if (option.value === '') option.textContent = t('agentModal.modelDefaultOption', { provider: display.label });
+    else if (option.value !== 'custom') option.hidden = !aliases.includes(option.value);
   }
-  select.hidden = !display.modelAliases;
+  const custom = select.querySelector('option[value="custom"]');
+  for (const model of display.modelAliases ? [] : models) {
+    const option = new Option(model, model);
+    option.dataset.listed = 'true';
+    select.insertBefore(option, custom);
+  }
+  select.hidden = !display.modelAliases && !models.length;
   customInput.placeholder = t('agentModal.modelCustomPlaceholder', { model: display.modelExample });
 }
 
 /**
  * Prefills a model-family `<select>` (+ its companion "Custom" text input)
- * from an arbitrary modelOverride string — a known alias selects directly;
- * any other non-empty value (a full pinned model ID) falls into the Custom
- * option with that value shown in the companion input. A provider with no
- * aliases always uses the Custom input (see configureModelPicker).
+ * from an arbitrary modelOverride string — a known alias or listed model
+ * selects directly; any other non-empty value (a full pinned model ID)
+ * falls into the Custom option with that value shown in the companion
+ * input. With nothing to pick from, it always uses the Custom input (see
+ * configureModelPicker).
  * @param {HTMLSelectElement} select
  * @param {HTMLInputElement} customInput
  * @param {string} value
  * @param {import('./agentProviders.js').ProviderDisplay} display
+ * @param {string[]} [models] - Listed model IDs, for a provider with no aliases.
  */
-function setModelSelectValue(select, customInput, value, display) {
-  configureModelPicker(select, customInput, display);
-  if (!display.modelAliases) {
+function setModelSelectValue(select, customInput, value, display, models = []) {
+  configureModelPicker(select, customInput, display, models);
+  const known = display.modelAliases ?? models;
+  if (select.hidden) {
     select.value = 'custom';
     customInput.hidden = false;
     customInput.value = value;
-  } else if (value === '' || display.modelAliases.includes(value)) {
+  } else if (value === '' || known.includes(value)) {
     select.value = value;
     customInput.hidden = true;
     customInput.value = '';
@@ -874,6 +887,42 @@ function setModelSelectValue(select, customInput, value, display) {
     customInput.hidden = false;
     customInput.value = value;
   }
+}
+
+/**
+ * Model lists by provider and working directory, so reopening the form or
+ * the model switcher doesn't rerun the provider's CLI. A failed listing
+ * isn't kept, so the next open tries again.
+ * @type {Map<string, Promise<string[]>>}
+ */
+const providerModelsCache = new Map();
+
+/**
+ * The model IDs a provider with no aliases of its own can run in a working
+ * directory (GET /api/providers/:id/models), for its model picker. Empty
+ * when it has none to list or listing failed: the exact-ID input still
+ * takes any model.
+ * @param {string} providerId
+ * @param {string} [workingDir]
+ * @returns {Promise<string[]>}
+ */
+function fetchProviderModels(providerId, workingDir = '') {
+  if (providerDisplayFor(providerId).modelAliases) return Promise.resolve([]);
+  const key = `${providerId}\n${workingDir}`;
+  if (!providerModelsCache.has(key)) {
+    const query = workingDir ? `?workingDir=${encodeURIComponent(workingDir)}` : '';
+    providerModelsCache.set(key, fetch(`/api/providers/${encodeURIComponent(providerId)}/models${query}`)
+      .then((res) => (res.ok ? res.json() : { models: [] }))
+      .then(({ models }) => {
+        if (!models?.length) providerModelsCache.delete(key);
+        return models ?? [];
+      })
+      .catch(() => {
+        providerModelsCache.delete(key);
+        return [];
+      }));
+  }
+  return providerModelsCache.get(key);
 }
 
 /**
@@ -1000,10 +1049,14 @@ let pendingConfirmResolve = null;
  * @param {string} message
  * `textInput.list` names a `<datalist>` of suggestions for the field.
  * `modelInput.provider` is the agent's provider id, which decides which
- * model aliases are offered.
- * @param {{ checkboxLabel?: string, textInput?: { value?: string, placeholder?: string, list?: string }, modelInput?: { value?: string, provider?: string }, okLabel?: string }} [opts]
+ * model aliases are offered, or for a provider with none, which models are
+ * listed (in `modelInput.workingDir`, see fetchProviderModels).
+ * @param {{ checkboxLabel?: string, textInput?: { value?: string, placeholder?: string, list?: string }, modelInput?: { value?: string, provider?: string, workingDir?: string }, okLabel?: string }} [opts]
  * @returns {Promise<{ confirmed: boolean, checked: boolean, value: string }>}
  */
+/** Bumped per confirmDialog() call, so a late model list never lands in a later dialog. */
+let confirmDialogSeq = 0;
+
 function confirmDialog(message, opts = {}) {
   confirmMessage.textContent = message;
   confirmCheckboxRow.hidden = !opts.checkboxLabel;
@@ -1019,8 +1072,19 @@ function confirmDialog(message, opts = {}) {
     else confirmTextInput.removeAttribute('list');
   }
   confirmModelRow.hidden = !opts.modelInput;
+  const confirmSeq = ++confirmDialogSeq;
   if (opts.modelInput) {
-    setModelSelectValue(confirmModelSelect, confirmModelCustomInput, opts.modelInput.value ?? '', providerDisplayFor(opts.modelInput.provider));
+    const { value = '', provider, workingDir } = opts.modelInput;
+    const display = providerDisplayFor(provider);
+    setModelSelectValue(confirmModelSelect, confirmModelCustomInput, value, display);
+    fetchProviderModels(display.id, workingDir).then((models) => {
+      if (confirmSeq !== confirmDialogSeq || confirmOverlay.hidden || !models.length) return;
+      // Keep whatever's been typed or picked since the dialog opened.
+      const current = getModelSelectValue(confirmModelSelect, confirmModelCustomInput);
+      const hadFocus = confirmModelRow.contains(document.activeElement);
+      setModelSelectValue(confirmModelSelect, confirmModelCustomInput, current, display, models);
+      if (hadFocus) (confirmModelSelect.hidden ? confirmModelCustomInput : confirmModelSelect).focus();
+    });
   }
   confirmOk.textContent = opts.okLabel ?? t('confirm.deleteBtn');
   confirmOk.classList.toggle('neutral', Boolean(opts.textInput || opts.modelInput));
@@ -3451,7 +3515,7 @@ async function handleNoteFormSubmit(e) {
 async function changeAgentModel(agent) {
   const { confirmed, value } = await confirmDialog(
     t('confirm.switchModel', { name: agent.name }),
-    { modelInput: { value: agent.modelOverride ?? '', provider: agent.provider }, okLabel: t('confirm.switchModelBtn') },
+    { modelInput: { value: agent.modelOverride ?? '', provider: agent.provider, workingDir: agent.workingDir }, okLabel: t('confirm.switchModelBtn') },
   );
   if (!confirmed) return;
   const modelOverride = value.trim();
@@ -4221,6 +4285,7 @@ async function refreshProviderAvailability() {
     providerAvailability = new Map();
   }
   renderProviderOptions();
+  refreshAgentModelOptions();
 }
 
 /**
@@ -4278,6 +4343,7 @@ function applyProviderToAgentForm() {
   const display = providerDisplayFor(agentProviderSelect.value);
   setModelSelectValue(agentModelInput, agentModelCustomInput, '', display);
   agentModelHint.textContent = t(display.modelAliases ? 'agentModal.modelHint' : 'agentModal.modelIdHint');
+  refreshAgentModelOptions();
   agentResumeHint.innerHTML = t('agentModal.resumeIdHint', { command: escHtml(display.resumeCommand('').trim()) });
   agentAutocompactLabel.hidden = !display.autocompact;
   if (!display.autocompact) agentAutocompactInput.value = '';
@@ -4286,6 +4352,26 @@ function applyProviderToAgentForm() {
   const generatedElsewhere = PROVIDER_IDS.some((id) => id !== display.id && providerDisplayFor(id).namePool.includes(agentNameInput.value));
   if (generatedElsewhere) agentNameInput.value = generateAgentName(display.id);
   renderProviderStatus();
+}
+
+/** Bumped per model listing, so a slow answer for an older provider or directory is ignored. */
+let agentModelsSeq = 0;
+
+/**
+ * Offers the models the New Agent form's provider lists for its working
+ * directory (see fetchProviderModels), keeping whatever model is already
+ * picked or typed. Nothing changes for a provider with aliases of its own.
+ * @returns {Promise<void>}
+ */
+async function refreshAgentModelOptions() {
+  const seq = ++agentModelsSeq;
+  const display = providerDisplayFor(agentProviderSelect.value);
+  if (display.modelAliases) return;
+  const models = await fetchProviderModels(display.id, agentDirInput.value.trim());
+  if (seq !== agentModelsSeq || modalOverlay.hidden) return;
+  const current = getModelSelectValue(agentModelInput, agentModelCustomInput);
+  setModelSelectValue(agentModelInput, agentModelCustomInput, current, display, models);
+  agentModelHint.textContent = t(models.length ? 'agentModal.modelListHint' : 'agentModal.modelIdHint');
 }
 
 /** Most working directories to offer as one-click picks in the New Agent modal. */
