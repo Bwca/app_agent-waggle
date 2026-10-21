@@ -59,9 +59,13 @@ html, body { height: 100%; background: var(--bg0); color: var(--text); font-fami
 
 #app-logo { width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0; cursor: pointer; }
 
-#app-title { font-weight: 700; font-size: 15px; letter-spacing: .3px; }
+/* The version sits under the title: side by side, "Agentwaggle" plus the
+   version needs more of the 220px sidebar than is left beside the buttons. */
+#app-title-wrap { display: flex; flex-direction: column; min-width: 0; }
 
-#app-version { font-size: 10px; color: var(--dim); text-decoration: none; white-space: nowrap; }
+#app-title { font-weight: 700; font-size: 15px; letter-spacing: .3px; line-height: 1.15; }
+
+#app-version { font-size: 10px; line-height: 1.2; color: var(--dim); text-decoration: none; white-space: nowrap; }
 #app-version:hover { color: var(--text); text-decoration: underline; }
 
 #sidebar-header-right { display: flex; align-items: center; gap: 10px; }
