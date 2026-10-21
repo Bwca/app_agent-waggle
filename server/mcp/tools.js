@@ -1,5 +1,5 @@
 /**
- * @fileoverview MCP tool definitions exposing Clauhort's own chat/agent
+ * @fileoverview MCP tool definitions exposing Agentwaggle's own chat/agent
  * functionality to an external Claude instance (Claude Code or Claude
  * Desktop, connected over the /mcp endpoint — see mcp/index.js). Every
  * handler here calls the exact same functions the REST routes
@@ -95,7 +95,7 @@ function crossChatConflictMessage(agentId, targetChatId) {
 }
 
 /**
- * Registers every Clauhort-as-tools MCP tool on `mcpServer`.
+ * Registers every Agentwaggle-as-tools MCP tool on `mcpServer`.
  * @param {import('@modelcontextprotocol/sdk/server/mcp.js').McpServer} mcpServer
  * @param {import('ws').WebSocketServer} wss
  */
@@ -424,7 +424,7 @@ export function registerTools(mcpServer, wss) {
   mcpServer.registerTool(
     'send_message',
     {
-      description: 'Post a message into a chat, and wait for and return every agent reply it produces (including any @mention relay chain). Posted as the user unless asAgentId is given, in which case it\'s posted as that agent (a member of the chat) and goes only to the teammates it @mentions. Agents Clauhort itself runs don\'t get this tool at all (see buildArgs in services/providers/claude.js): their normal reply already reaches the chat. A busy agent can take a while to reply — there is no timeout here; if a caller\'s own tool-call timeout gives up first, the reply is still saved and visible via a follow-up get_chat/search_messages call.',
+      description: 'Post a message into a chat, and wait for and return every agent reply it produces (including any @mention relay chain). Posted as the user unless asAgentId is given, in which case it\'s posted as that agent (a member of the chat) and goes only to the teammates it @mentions. Agents Agentwaggle itself runs don\'t get this tool at all (see buildArgs in services/providers/claude.js): their normal reply already reaches the chat. A busy agent can take a while to reply — there is no timeout here; if a caller\'s own tool-call timeout gives up first, the reply is still saved and visible via a follow-up get_chat/search_messages call.',
       inputSchema: {
         chatId: z.string(),
         content: z.string().min(1),
