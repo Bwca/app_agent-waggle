@@ -41,9 +41,9 @@ describe('roster-change notes', () => {
     await handler.postAgentRemovedNote(chat, first, 'user', wss);
 
     assert.deepEqual(db.getMessages(chat.id, 10).map((m) => m.content), [
-      '➕ You added Ada [agent ada-1] to the chat',
+      '➕ The user added Ada [agent ada-1] to the chat',
       '➕ An MCP client added Ada [agent ada-2] to the chat',
-      '🚪 You removed Ada [agent ada-1] from the chat',
+      '🚪 The user removed Ada [agent ada-1] from the chat',
     ]);
   });
 });

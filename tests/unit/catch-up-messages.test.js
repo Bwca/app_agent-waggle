@@ -120,9 +120,9 @@ describe('catchUpMessagesFor', () => {
     const roster = { authorName: 'System', isSystemNote: true };
     const messages = [
       msg('1', 'claudia', 'my last reply'),
-      msg('2', 'oona', '➕ You added Oona [agent oona] to the chat', roster),
+      msg('2', 'oona', '➕ The user added Oona [agent oona] to the chat', roster),
       msg('3', null, '@Oona you\'re alive?'),
-      msg('4', 'oona', '🚪 You removed Oona [agent oona] from the chat', roster),
+      msg('4', 'oona', '🚪 The user removed Oona [agent oona] from the chat', roster),
       msg('5', 'clarence', '🗜️ Clarence\'s context was compacted (auto): size unreported', { isSystemNote: true }),
     ];
     assert.deepEqual(catchUpMessagesFor(agent, messages).map((m) => m.id), ['2', '3', '4']);
@@ -164,7 +164,7 @@ describe('catchUpMessagesFor — seenUntil', () => {
 
   test('a roster note about the agent itself still goes out — it was re-added, say', () => {
     const agent = { id: 'claus', name: 'Claus', resumeId: 'sess-1', seenUntil: '2026-10-16T01:01:00.000Z' };
-    const messages = [msg('1', 'claus', '➕ You added Claus [agent claus] to the chat', { ...at('2026-10-16T01:02:00.000Z'), authorName: 'System', isSystemNote: true })];
+    const messages = [msg('1', 'claus', '➕ The user added Claus [agent claus] to the chat', { ...at('2026-10-16T01:02:00.000Z'), authorName: 'System', isSystemNote: true })];
     assert.deepEqual(catchUpMessagesFor(agent, messages).map((m) => m.id), ['1']);
   });
 

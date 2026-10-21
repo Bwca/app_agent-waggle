@@ -1275,6 +1275,17 @@ async function postCompactionNotes(chat, agent, compactions, wss) {
  */
 
 /**
+ * How a roster note names who acted. Not "You": the notes go out to agents
+ * as catch-up too (see isCatchUpContent), and to an agent "You added Ada"
+ * read as the agent itself having done it.
+ * @param {RosterActor} actor
+ * @returns {string}
+ */
+function rosterActorLabel(actor) {
+  return actor === 'mcp' ? 'An MCP client' : 'The user';
+}
+
+/**
  * Persists and broadcasts one isSystemNote message recording that `agent`
  * was removed from `chat` — either unmembered or deleted outright — so the
  * chat keeps a visible, searchable record of who/what did it. Mirrors
@@ -1289,7 +1300,7 @@ async function postCompactionNotes(chat, agent, compactions, wss) {
  * @returns {Promise<void>}
  */
 export async function postAgentRemovedNote(chat, agent, actor, wss) {
-  const actorLabel = actor === 'mcp' ? 'An MCP client' : 'You';
+  const actorLabel = rosterActorLabel(actor);
   /** @type {import('../store/db.js').Message} */
   const noteMessage = {
     id: uuidv4(),
@@ -1327,7 +1338,7 @@ export async function postAgentRemovedNote(chat, agent, actor, wss) {
  * @returns {Promise<void>}
  */
 export async function postAgentAddedNote(chat, agent, actor, wss) {
-  const actorLabel = actor === 'mcp' ? 'An MCP client' : 'You';
+  const actorLabel = rosterActorLabel(actor);
   /** @type {import('../store/db.js').Message} */
   const noteMessage = {
     id: uuidv4(),
