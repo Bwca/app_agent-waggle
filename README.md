@@ -1,6 +1,8 @@
-# Clauhort
+# Agentwaggle
 
-A multi-agent Claude chat app. Each participant in a conversation is a Claude Code CLI instance running in its own working directory — think MS Teams, but the participants are AI agents.
+A multi-agent chat app for coding agents. Each participant in a conversation is a real agent CLI (Claude Code, or opencode) running in its own working directory — think MS Teams, but the participants are AI agents.
+
+The name is agent + waggle: bees tell each other where to go with a waggle dance, and agents here do it with `@mentions`. It was called Agentwaggle (Claude + cohort) until it stopped being Claude-only — see [Upgrading from Agentwaggle](#upgrading-from-clauhort).
 
 ## How it works
 
@@ -86,7 +88,7 @@ Other environment variables:
 | `APP_LOG_LEVEL` | `info` | Minimum level written to the log file: `debug`, `info`, `warn`, `error`, or `silent` to disable file logging entirely. The console always stays at `info`+ regardless of this setting |
 | `APP_TRANSCRIPT_LOG` | unset (off) | Set to any truthy value to enable a separate, plain-text, per-chat transcript log at `<APP_LOG_DIR>/chats/<chatId>.log` — the exact content sent to and received from each agent on every turn, for debugging without needing to `claude --resume` a session in a real terminal. Off by default: unlike the structured log above, this can contain full conversation content |
 | `APP_AUTOCOMPACT` | `200k` | Context size at which each agent's CLI session gets automatically summarized (passed as `--autocompact`): `auto`, or `100k`–`1M`. Lower is cheaper per request but summarizes more often; `auto` waits until the model's full window, which can make every request in a turn re-read hundreds of thousands of tokens. Only the fallback: the default set in Settings, and an agent's own setting (its ⋮ menu), both win over it. |
-| `APP_MCP_SERVER_NAME` | `clauhort` | The name you registered Clauhort's own MCP server under (see below). Agents Clauhort runs are started without that server's `send_message` tool, so they can't post into a chat as you; set this if you registered it under another name. |
+| `APP_MCP_SERVER_NAME` | `agentwaggle` | The name you registered Agentwaggle's own MCP server under (see below). Agents Agentwaggle runs are started without that server's `send_message` tool, so they can't post into a chat as you; set this if you registered it under another name. `agentwaggle` and the old `clauhort` are always covered. |
 | `MCP_AUTH_TOKEN` | unset (MCP server disabled) | Bearer/query-param token required to reach the `/mcp` endpoint (see [MCP server](#mcp-server) below) — generate with `openssl rand -hex 32`. Unset means `/mcp` isn't mounted at all, not merely unauthenticated |
 
 ## Agent options
@@ -107,7 +109,7 @@ Other environment variables:
 
 ## MCP server
 
-Clauhort can itself be driven by another Claude instance — Claude Code, or Claude Desktop — as an MCP server exposing its chats/agents as tools: `list_chats`, `get_chat`, `search_messages`, `create_chat`, `update_chat`, `delete_chat`, `add_agent_to_chat`, `remove_agent_from_chat`, `list_agents`, `create_agent`, `update_agent`, `delete_agent`, `restart_agent`, and `send_message` (posts a message and waits for the resulting agent reply/replies, including any `@mention` relay chain; posted as the user, or as an agent in that chat when `asAgentId` is given). Every tool calls the exact same functions the REST API and UI use, so behavior is identical. Agents Clauhort runs itself also see this server when it's registered at user scope, and can use every tool except `send_message`: their normal reply already reaches the chat, and `send_message` would post as you.
+Agentwaggle can itself be driven by another Claude instance — Claude Code, or Claude Desktop — as an MCP server exposing its chats/agents as tools: `list_chats`, `get_chat`, `search_messages`, `create_chat`, `update_chat`, `delete_chat`, `add_agent_to_chat`, `remove_agent_from_chat`, `list_agents`, `create_agent`, `update_agent`, `delete_agent`, `restart_agent`, and `send_message` (posts a message and waits for the resulting agent reply/replies, including any `@mention` relay chain; posted as the user, or as an agent in that chat when `asAgentId` is given). Every tool calls the exact same functions the REST API and UI use, so behavior is identical. Agents Agentwaggle runs itself also see this server when it's registered at user scope, and can use every tool except `send_message`: their normal reply already reaches the chat, and `send_message` would post as you.
 
 Off by default — set `MCP_AUTH_TOKEN` to enable it:
 
@@ -117,15 +119,24 @@ export MCP_AUTH_TOKEN=$(openssl rand -hex 32)
 
 A plain shell `export` only lives in that one terminal session, so the MCP server silently comes back disabled after every reboot (or any time the server is started from a fresh shell). To persist it, copy `server/.env.example` to `server/.env` (gitignored) and set `MCP_AUTH_TOKEN` there instead — `index.js` loads it on startup via Node's built-in `process.loadEnvFile`, and a real environment variable of the same name still takes precedence over it.
 
-This token is defense-in-depth on top of the server's existing loopback-only bind, not a real security boundary — it just stops some other local process from silently driving Clauhort, since the endpoint would otherwise be reachable, unauthenticated, and able to run real shell/file tools through the agents it creates.
+This token is defense-in-depth on top of the server's existing loopback-only bind, not a real security boundary — it just stops some other local process from silently driving Agentwaggle, since the endpoint would otherwise be reachable, unauthenticated, and able to run real shell/file tools through the agents it creates.
 
 Connect from **Claude Code**:
 
 ```bash
-claude mcp add --transport http clauhort "http://127.0.0.1:3001/mcp?token=<token>"
+claude mcp add --transport http agentwaggle "http://127.0.0.1:3001/mcp?token=<token>"
 ```
 
 Connect from **Claude Desktop**: Settings → Connectors → Add custom connector, and paste `http://127.0.0.1:3001/mcp?token=<token>` as the URL (its connector setup has no separate header field, hence the token in the URL itself). Both assume Claude runs on the same machine as the server — this never becomes reachable over the network any more than the rest of the app does.
+
+### Upgrading from Agentwaggle
+
+Nothing needs doing. Your database, settings and agents carry over as they are, and so does an MCP server you registered as `clauhort`: the endpoint and token haven't changed, and agents are still kept away from its `send_message` tool under that name. Its tools just keep the `mcp__clauhort__` prefix. To use the new name instead:
+
+```bash
+claude mcp remove clauhort
+claude mcp add --transport http agentwaggle "http://127.0.0.1:3001/mcp?token=<token>"
+```
 
 ## E2E tests
 
@@ -145,14 +156,14 @@ The running version is shown in the sidebar header, next to the app name; click 
 
 ## Disclaimer
 
-Clauhort is provided "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, including but not limited to the warranties of merchantability, fitness for a particular purpose, and non-infringement — see [LICENSE](./LICENSE) for the full MIT license text. To the maximum extent permitted by applicable law, the authors and contributors shall not be liable for any claim, damages, or other liability — whether in an action of contract, tort, or otherwise, and whether direct, indirect, incidental, special, exemplary, or consequential (including loss of data, profits, or business interruption) — arising from, out of, or in connection with the software or its use, even if advised of the possibility of such damage.
+Agentwaggle is provided "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, including but not limited to the warranties of merchantability, fitness for a particular purpose, and non-infringement — see [LICENSE](./LICENSE) for the full MIT license text. To the maximum extent permitted by applicable law, the authors and contributors shall not be liable for any claim, damages, or other liability — whether in an action of contract, tort, or otherwise, and whether direct, indirect, incidental, special, exemplary, or consequential (including loss of data, profits, or business interruption) — arising from, out of, or in connection with the software or its use, even if advised of the possibility of such damage.
 
 Without limiting the above:
 
-- **Clauhort itself doesn't read, write, or execute anything on your system.** Every agent is the real `claude` CLI — Anthropic's own tool, which you install and authenticate yourself, independently of Clauhort — and every file edit, shell command, or browser action is carried out by that CLI process under its own permission model, including, if you enable YOLO mode, with its permission checks skipped, and, if you grant browser access, real control of your Chrome browser. Clauhort's own code only launches that process, relays your messages to it, and displays what it reports back — including its permission prompts, which you still review and approve yourself before anything runs. You are solely responsible for what you authorize the CLI to do, and for anything it does as a result, including but not limited to modifying or deleting files, running commands, incurring costs, or taking actions in your browser.
-- **No guarantee of correctness, security, or availability.** This software (Clauhort's own code, not the `claude` CLI it launches) may contain bugs, may behave unpredictably, and may stop working without notice. Back up anything you can't afford to lose before pointing an agent at it.
-- **Third-party costs and services are not our responsibility.** Clauhort orchestrates the Anthropic `claude` CLI against your own Anthropic account. Any usage charges, rate limits, outages, or changes to that service are strictly between you and Anthropic.
-- **Not affiliated with Anthropic.** Clauhort is an independent, community project — not affiliated with, endorsed by, or sponsored by Anthropic, PBC. "Claude" and "Claude Code" are trademarks of Anthropic, referenced here solely to describe compatibility.
+- **Agentwaggle itself doesn't read, write, or execute anything on your system.** Every agent is the real `claude` CLI — Anthropic's own tool, which you install and authenticate yourself, independently of Agentwaggle — and every file edit, shell command, or browser action is carried out by that CLI process under its own permission model, including, if you enable YOLO mode, with its permission checks skipped, and, if you grant browser access, real control of your Chrome browser. Agentwaggle's own code only launches that process, relays your messages to it, and displays what it reports back — including its permission prompts, which you still review and approve yourself before anything runs. You are solely responsible for what you authorize the CLI to do, and for anything it does as a result, including but not limited to modifying or deleting files, running commands, incurring costs, or taking actions in your browser.
+- **No guarantee of correctness, security, or availability.** This software (Agentwaggle's own code, not the `claude` CLI it launches) may contain bugs, may behave unpredictably, and may stop working without notice. Back up anything you can't afford to lose before pointing an agent at it.
+- **Third-party costs and services are not our responsibility.** Agentwaggle orchestrates the Anthropic `claude` CLI against your own Anthropic account. Any usage charges, rate limits, outages, or changes to that service are strictly between you and Anthropic.
+- **Not affiliated with Anthropic.** Agentwaggle is an independent, community project — not affiliated with, endorsed by, or sponsored by Anthropic, PBC. "Claude" and "Claude Code" are trademarks of Anthropic, referenced here solely to describe compatibility.
 - **You use this software entirely at your own risk.** By using it, you agree to indemnify and hold harmless the authors and contributors from any claim, liability, loss, or expense (including legal fees) arising out of or related to your use of it.
 
 This is a plain-language summary for users, not a substitute for legal advice.
