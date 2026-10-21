@@ -30,11 +30,12 @@ import { DEFAULT_PROVIDER_ID } from '../../public/agentProviders.js';
  *   `autocompactDefault` is the compaction window from Settings (see
  *   setAutocompactDefault in agentProcessManager.js); a provider with no
  *   such notion ignores it.
- * @property {(agent?: { workingDir?: string }) => { command: string, args: string[] }} versionCommand - A
+ * @property {(agent?: { workingDir?: string }) => { command: string, args: string[], source: BinarySource }} versionCommand - A
  *   cheap no-model-call invocation, used to verify the binary resolves
- *   before an agent is created (see agentRunner.js's verifyProviderAvailable).
+ *   before an agent is created and to tell the New Agent form which
+ *   providers it can offer (see agentRunner.js's verifyProviderAvailable).
  *   Gets the agent-to-be when there is one, for a provider that resolves its
- *   binary per project.
+ *   binary per project, and says where the binary it chose came from.
  * @property {(state: object, content: import('../agentRunner.js').ContentBlock[]) => void | Promise<void>} startTurn -
  *   Writes whatever starts one turn to the process, through the `write` the
  *   state was created with. A provider whose protocol needs a handshake
@@ -67,6 +68,13 @@ import { DEFAULT_PROVIDER_ID } from '../../public/agentProviders.js';
  * @property {(toolName: string, value: string) => string[] | null} overlappingPatterns -
  *   The patterns a denial would grant, for a tool whose grants can cover one
  *   another's (see agentRunner.js's dedupePermissionDenials), or null.
+ */
+
+/**
+ * Where a provider found its binary: an env var override, a copy pinned by
+ * the agent's own project, PATH, or the CLI's own install location in the
+ * user's home directory.
+ * @typedef {'env' | 'project' | 'path' | 'home'} BinarySource
  */
 
 /**

@@ -186,25 +186,29 @@ export function runAgentStream({ agent, content, onChunk, onStatus, signal }) {
  * @param {import('./providers/index.js').AgentProvider} [provider]
  * @param {{ workingDir?: string }} [agent] - The agent-to-be, for a provider
  *   that resolves its binary per project (see AgentProvider.versionCommand).
- * @returns {Promise<{ ok: true } | { ok: false, error: string }>}
+ * @returns {Promise<{ ok: true, version: string, source: import('./providers/index.js').BinarySource } | { ok: false, error: string, source: import('./providers/index.js').BinarySource }>}
+ *   `version` is the binary's own first line of --version output.
  */
 export async function verifyProviderAvailable(provider = getProvider(), agent = undefined) {
-  const { command, args } = provider.versionCommand(agent);
+  const { command, args, source } = provider.versionCommand(agent);
   return new Promise((resolve) => {
-    const child = spawn(command, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
     let stderr = '';
+    child.stdout.setEncoding('utf-8');
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
     child.stderr.setEncoding('utf-8');
     child.stderr.on('data', (chunk) => { stderr += chunk; });
 
     child.on('error', (err) => {
-      resolve({ ok: false, error: t('errors.agentSpawnFailed', { provider: provider.displayName, message: err.message }) });
+      resolve({ ok: false, source, error: t('errors.agentSpawnFailed', { provider: provider.displayName, message: err.message }) });
     });
     child.on('close', (code) => {
       if (code !== 0) {
-        resolve({ ok: false, error: stderr.trim() || t('errors.agentExitCode', { provider: provider.displayName, code }) });
+        resolve({ ok: false, source, error: stderr.trim() || t('errors.agentExitCode', { provider: provider.displayName, code }) });
         return;
       }
-      resolve({ ok: true });
+      resolve({ ok: true, source, version: stdout.trim().split('\n')[0] ?? '' });
     });
   });
 }

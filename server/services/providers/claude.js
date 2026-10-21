@@ -546,7 +546,7 @@ export const claudeProvider = {
   id: 'claude',
   displayName: 'Claude',
   spawnCommand: (agent, options) => ({ command: CLAUDE_BIN, args: buildArgs(agent, options) }),
-  versionCommand: () => ({ command: CLAUDE_BIN, args: ['--version'] }),
+  versionCommand: () => ({ command: CLAUDE_BIN, args: ['--version'], source: process.env.CLAUDE_BIN ? 'env' : 'path' }),
   startTurn: (state, content) => state.write(encodeTurn(content)),
   parseLine,
   createProcessState: (_agent, { write }) => ({ write, costSoFar: 0 }),

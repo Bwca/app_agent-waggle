@@ -239,3 +239,50 @@ describe('opencode permission requests', () => {
     assert.equal(sent.at(-1).error.code, -32601);
   });
 });
+
+describe('finding the opencode binary', () => {
+  /**
+   * Runs `fn` with env vars temporarily set (undefined deletes one).
+   * @param {Record<string, string | undefined>} vars
+   * @param {() => void} fn
+   */
+  function withEnv(vars, fn) {
+    const saved = Object.fromEntries(Object.keys(vars).map((key) => [key, process.env[key]]));
+    for (const [key, value] of Object.entries(vars)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    try { fn(); } finally {
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  }
+
+  test('OPENCODE_BIN wins, then the project\'s pinned copy, then PATH', async () => {
+    const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const { tmpdir } = await import('node:os');
+    const { locateBin } = await import('../../server/services/providers/opencode.js');
+    const root = mkdtempSync(join(tmpdir(), 'opencode-bin-'));
+    try {
+      const project = join(root, 'project');
+      mkdirSync(join(project, 'node_modules', '.bin'), { recursive: true });
+      writeFileSync(join(project, 'node_modules', '.bin', 'opencode'), '');
+      const pathDir = join(root, 'path-bin');
+      mkdirSync(pathDir);
+      writeFileSync(join(pathDir, 'opencode'), '');
+
+      withEnv({ OPENCODE_BIN: '/custom/opencode', PATH: pathDir }, () => {
+        assert.deepEqual(locateBin(project), { command: '/custom/opencode', source: 'env' });
+      });
+      withEnv({ OPENCODE_BIN: undefined, PATH: pathDir }, () => {
+        assert.deepEqual(locateBin(project), { command: join(project, 'node_modules', '.bin', 'opencode'), source: 'project' });
+        assert.deepEqual(locateBin(root), { command: join(pathDir, 'opencode'), source: 'path' });
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});

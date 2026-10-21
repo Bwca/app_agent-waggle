@@ -25,7 +25,8 @@
  */
 
 import { existsSync } from 'fs';
-import { basename, dirname, join, relative, isAbsolute } from 'path';
+import { homedir } from 'os';
+import { basename, delimiter, dirname, join, relative, isAbsolute } from 'path';
 import { commandPrefixes } from './shellCommands.js';
 
 /** @typedef {import('./index.js').ToolCall} ToolCall */
@@ -53,16 +54,53 @@ const TOOL_NAME_BY_KIND = { execute: SHELL_TOOL, edit: 'edit', read: 'read', del
 const MAX_TOOL_RESULT_CHARS = 8000;
 
 /**
- * The opencode binary for an agent: OPENCODE_BIN if set, else the one the
- * project itself pins (`node_modules/.bin/opencode` in its workingDir, as
- * opencode's own npm package installs it), else `opencode` on PATH.
+ * Where opencode's own install script puts the binary when nothing else is
+ * asked for. Often not on the PATH the server inherits (it's added by a
+ * shell profile line), so it's checked by path rather than left to PATH.
+ */
+const HOME_INSTALL_BIN = join(homedir(), '.opencode', 'bin', 'opencode');
+
+/**
+ * Finds an executable on PATH, the way a shell would.
+ * @param {string} name
+ * @returns {string | null}
+ */
+function findOnPath(name) {
+  const names = process.platform === 'win32' ? [`${name}.exe`, `${name}.cmd`, name] : [name];
+  for (const dir of (process.env.PATH ?? '').split(delimiter).filter(Boolean)) {
+    for (const candidate of names) {
+      if (existsSync(join(dir, candidate))) return join(dir, candidate);
+    }
+  }
+  return null;
+}
+
+/**
+ * The opencode binary for an agent, and where it was found, first match
+ * wins: OPENCODE_BIN; the copy the project itself pins
+ * (`node_modules/.bin/opencode` in its workingDir, as opencode's npm
+ * package installs it); `opencode` on PATH; opencode's own install
+ * location (HOME_INSTALL_BIN). With none of them, plain `opencode`, which
+ * then fails to spawn with a clear ENOENT.
+ * @param {string} [workingDir]
+ * @returns {{ command: string, source: import('./index.js').BinarySource }}
+ */
+export function locateBin(workingDir) {
+  if (process.env.OPENCODE_BIN) return { command: process.env.OPENCODE_BIN, source: 'env' };
+  const local = workingDir ? join(workingDir, 'node_modules', '.bin', 'opencode') : null;
+  if (local && existsSync(local)) return { command: local, source: 'project' };
+  const onPath = findOnPath('opencode');
+  if (onPath) return { command: onPath, source: 'path' };
+  if (existsSync(HOME_INSTALL_BIN)) return { command: HOME_INSTALL_BIN, source: 'home' };
+  return { command: 'opencode', source: 'path' };
+}
+
+/**
  * @param {string} [workingDir]
  * @returns {string}
  */
 export function resolveBin(workingDir) {
-  if (process.env.OPENCODE_BIN) return process.env.OPENCODE_BIN;
-  const local = workingDir ? join(workingDir, 'node_modules', '.bin', 'opencode') : null;
-  return local && existsSync(local) ? local : 'opencode';
+  return locateBin(workingDir).command;
 }
 
 /**
@@ -555,7 +593,10 @@ export const opencodeProvider = {
   id: 'opencode',
   displayName: 'opencode',
   spawnCommand: (agent) => ({ command: resolveBin(agent.workingDir), args: ['acp', '--cwd', agent.workingDir] }),
-  versionCommand: (agent) => ({ command: resolveBin(agent?.workingDir), args: ['--version'] }),
+  versionCommand: (agent) => {
+    const { command, source } = locateBin(agent?.workingDir);
+    return { command, args: ['--version'], source };
+  },
   startTurn,
   parseLine,
   createProcessState,
