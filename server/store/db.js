@@ -1357,6 +1357,23 @@ export function getMessages(chatId, limit = 50, beforeId) {
 }
 
 /**
+ * An agent's most recent real turn in a chat, however far back it is:
+ * its own reply, skipping isLocalCommandOnly replies and isSystemNote
+ * notes for the reasons their docs on the Message typedef give.
+ * @param {string} chatId
+ * @param {string} agentId
+ * @returns {Message | null}
+ */
+export function getLastAgentTurn(chatId, agentId) {
+  const row = db.prepare(`
+    SELECT * FROM messages WHERE chat_id = ? AND agent_id = ?
+      AND is_local_command_only = 0 AND is_system_note = 0
+    ORDER BY created_at DESC, rowid DESC LIMIT 1
+  `).get(chatId, agentId);
+  return row ? rowToMessage(row) : null;
+}
+
+/**
  * Total message count for a chat — the denominator behind the forum-style
  * page-number pagination in getMessagesPage (see its docs and the
  * GET /api/chats/:id/messages?page=… handler in routes/chats.js).

@@ -5,7 +5,7 @@
 
 import { WebSocket, WebSocketServer } from 'ws';
 import { v4 as uuidv4 } from 'uuid';
-import { getChat, getAgent, getAgentChatId, getMessages, addMessage, grantAgentPath, grantAgentToolPattern, setAgentResumeIdIfUnset, recordContextClear, setAgentModel, setAgentSeenUntil, setAgentUsage, setAgentSessionLimitReset, getUserDisplayName, createScheduledMessage, getScheduledMessages } from '../store/db.js';
+import { getChat, getAgent, getAgentChatId, getMessages, getLastAgentTurn, addMessage, grantAgentPath, grantAgentToolPattern, setAgentResumeIdIfUnset, recordContextClear, setAgentModel, setAgentSeenUntil, setAgentUsage, setAgentSessionLimitReset, getUserDisplayName, createScheduledMessage, getScheduledMessages } from '../store/db.js';
 import { parseResponders, extractMentionedAgents, parseSkillInvocation } from '../services/messageRouter.js';
 import { runAgentStream, dedupePermissionDenials } from '../services/agentRunner.js';
 import { providerForAgent } from '../services/providers/index.js';
@@ -534,6 +534,32 @@ export function catchUpMessagesFor(agent, messages) {
   // isSystemNote messages are never catch-up content for anyone — they're a
   // UI-only aside about one agent, not information another agent needs.
   return messages.slice(lastOwnIdx + 1).filter((m) => m.agentId !== agent.id && !m.isSystemNote);
+}
+
+/**
+ * The history a turn's prompt is built from (see buildPromptBlocks).
+ *
+ * `recent` is the recent messages. An observer needs far more than the
+ * normal 20 — see OBSERVER_HISTORY_LIMIT's docs. Normal worker agents
+ * already have their own session memory via --resume, so re-sending more
+ * than the recent window would be pure duplication for them (same
+ * reasoning catchUpMessagesFor's own docs give).
+ *
+ * `priorMessages` is `recent` plus the agent's own last turn when that
+ * has scrolled out of it, which buildPromptBlocks needs to tell an agent
+ * that has spoken here from a newcomer. Reported live: an agent whose only
+ * reply was 21 messages back (a failed turn in between left no reply) got
+ * the full "You are being added to a chat" preamble again, and took it to
+ * mean it had been re-added to a new lineup.
+ * @param {string} chatId
+ * @param {import('../store/db.js').Agent} agent
+ * @returns {{ recent: import('../store/db.js').Message[], priorMessages: import('../store/db.js').Message[] }}
+ */
+export function promptHistoryFor(chatId, agent) {
+  const recent = getMessages(chatId, agent.isObserver ? OBSERVER_HISTORY_LIMIT : 20);
+  const lastTurn = getLastAgentTurn(chatId, agent.id);
+  const priorMessages = lastTurn && !recent.some((m) => m.id === lastTurn.id) ? [lastTurn, ...recent] : recent;
+  return { recent, priorMessages };
 }
 
 /**
@@ -1418,15 +1444,10 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, exc
       const freshAgent = getAgent(agent.id) ?? agent;
       const freshChat = getChat(chat.id) ?? chat;
       const freshMembers = freshChat.memberAgentIds.map((id) => getAgent(id)).filter(Boolean);
-      // An observer needs far more than the normal 20-message catch-up
-      // window — see OBSERVER_HISTORY_LIMIT's docs. Normal worker agents
-      // already have their own session memory via --resume, so re-sending
-      // more than the recent window would be pure duplication for them
-      // (same reasoning catchUpMessagesFor's own docs give).
-      const priorMessages = getMessages(chat.id, freshAgent.isObserver ? OBSERVER_HISTORY_LIMIT : 20);
+      const { recent, priorMessages } = promptHistoryFor(chat.id, freshAgent);
       promptBuiltAt = new Date().toISOString();
       const { message, excludeMessageId: triggerId } = pending.trigger;
-      shownTurn = { messageIds: new Set([...priorMessages.map((m) => m.id), triggerId]), reply: pending.reply, done: false };
+      shownTurn = { messageIds: new Set([...recent.map((m) => m.id), triggerId]), reply: pending.reply, done: false };
       shownTurns.set(pendingKey, shownTurn);
       const content = buildPromptBlocks(freshAgent, freshChat, freshMembers, message, priorMessages, triggerId, pending.foldedMessageIds);
       logTranscript({ chatId: chat.id, agentId: agent.id, agentName: agent.name, streamId, direction: 'SENT', content });
