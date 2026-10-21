@@ -75,8 +75,8 @@ const PROVIDER_DISPLAYS = {
     icon: '⌬',
     namePool: [
       'Opal', 'Ophelia', 'Odette', 'Odile', 'Olive', 'Olivia', 'Oona', 'Opie',
-      'Otto', 'Octavia', 'Octavian', 'Odin', 'Coda', 'Cody', 'Codie', 'Codella',
-      'Codrin', 'Codina', 'Opaline', 'Oppie',
+      'Otto', 'Octavia', 'Octavian', 'Odin', 'Opaline', 'Oppie', 'Owen',
+      'Oscar', 'Orla', 'Orson', 'Oliver', 'Odessa',
     ],
     modelAliases: null,
     modelExample: 'ollama/local-agent',
