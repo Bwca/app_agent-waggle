@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Agentwaggle (formerly Agentwaggle, renamed once agents could run as more than Claude): a multi-agent chat app. Each chat participant ("agent") is a real Claude Code CLI instance running `--print --input-format=stream-json --output-format=stream-json` in its own working directory. The user chats with one or more agents at once (like a group chat), agents can respond in parallel, delegate to each other via `@mentions`, and run real Claude Code tools/skills/MCP servers against their own project directory.
+Agentwaggle (formerly Clauhort, renamed once agents could run as more than Claude): a multi-agent chat app. Each chat participant ("agent") is a real Claude Code CLI instance running `--print --input-format=stream-json --output-format=stream-json` in its own working directory. The user chats with one or more agents at once (like a group chat), agents can respond in parallel, delegate to each other via `@mentions`, and run real Claude Code tools/skills/MCP servers against their own project directory.
 
 - **Backend**: Node.js (ESM, `"type": "module"`) + Express + `ws`
 - **Frontend**: Plain HTML/CSS/JS in `server/public/` — ES modules, no build step, no framework
