@@ -644,6 +644,7 @@ const agentDirBrowseBtn = $('#agent-dir-browse');
 const agentDirRecent   = $('#agent-dir-recent');
 const agentDirRecentWrap = $('#agent-dir-recent-wrap');
 const agentProviderSelect = $('#agent-provider');
+const agentProviderStatus = $('#agent-provider-status');
 const agentResumeInput = $('#agent-resume');
 const agentResumeHint  = $('#agent-resume-hint');
 const agentModelInput  = $('#agent-model');
@@ -4166,11 +4167,11 @@ function openModal() {
   agentNameInput.value = '';
   agentDirInput.value = '';
   agentResumeInput.value = '';
-  agentProviderSelect.innerHTML = PROVIDER_IDS
-    .map((id) => `<option value="${id}">${escHtml(providerDisplayFor(id).label)}</option>`)
-    .join('');
+  providerAvailability = new Map();
   agentProviderSelect.value = DEFAULT_PROVIDER_ID;
+  renderProviderOptions();
   applyProviderToAgentForm();
+  refreshProviderAvailability();
   agentAutocompactInput.value = '';
   agentAutocompactInput.placeholder = t('agentModal.autocompactPlaceholder', { value: effectiveDefaultAutocompact() });
   agentNoteInput.value = '';
@@ -4187,6 +4188,82 @@ function openModal() {
   renderRecentDirs();
   modalOverlay.hidden = false;
   agentNameInput.focus();
+}
+
+/**
+ * What GET /api/providers last said about each provider for the New Agent
+ * form's working directory, by provider id. Empty while the first check is
+ * in flight, when every provider is offered.
+ * @type {Map<string, { id: string, available: boolean, source: string, version?: string, error?: string }>}
+ */
+let providerAvailability = new Map();
+
+/** Bumped per check, so a slow answer for an older working directory is ignored. */
+let providerCheckSeq = 0;
+
+/**
+ * Asks the server which providers can run for the working directory
+ * currently in the New Agent form (a project can pin its own opencode), and
+ * re-renders the provider picker from the answer. A failed check leaves
+ * every provider offered: Create runs the same check anyway.
+ * @returns {Promise<void>}
+ */
+async function refreshProviderAvailability() {
+  const seq = ++providerCheckSeq;
+  const workingDir = agentDirInput.value.trim();
+  if (!providerAvailability.size) agentProviderStatus.textContent = t('agentModal.providerChecking');
+  try {
+    const res = await fetch(`/api/providers${workingDir ? `?workingDir=${encodeURIComponent(workingDir)}` : ''}`);
+    if (!res.ok || seq !== providerCheckSeq) return;
+    providerAvailability = new Map((await res.json()).map((result) => [result.id, result]));
+  } catch {
+    if (seq !== providerCheckSeq) return;
+    providerAvailability = new Map();
+  }
+  renderProviderOptions();
+}
+
+/**
+ * Renders the provider picker: every provider, with one the server couldn't
+ * find disabled and marked as such. If that's the one picked, the picker
+ * moves to the first one that can run, since Create would only fail.
+ * @returns {void}
+ */
+function renderProviderOptions() {
+  const picked = agentProviderSelect.value || DEFAULT_PROVIDER_ID;
+  agentProviderSelect.innerHTML = PROVIDER_IDS.map((id) => {
+    const { label } = providerDisplayFor(id);
+    const missing = providerAvailability.get(id)?.available === false;
+    return `<option value="${id}"${missing ? ' disabled' : ''}>${escHtml(missing ? t('agentModal.providerNotFoundOption', { provider: label }) : label)}</option>`;
+  }).join('');
+  const runnable = (id) => providerAvailability.get(id)?.available !== false;
+  const next = runnable(picked) ? picked : PROVIDER_IDS.find(runnable);
+  agentProviderSelect.value = next ?? picked;
+  if (next && next !== picked) applyProviderToAgentForm();
+  renderProviderStatus();
+}
+
+/**
+ * The line under the provider picker: which binary the picked provider will
+ * run and where it was found, and how to install any provider that wasn't.
+ * @returns {void}
+ */
+function renderProviderStatus() {
+  if (!providerAvailability.size) return;
+  const lines = [];
+  const picked = providerAvailability.get(agentProviderSelect.value);
+  if (picked?.available) {
+    lines.push(t('agentModal.providerFound', {
+      provider: providerDisplayFor(picked.id).label,
+      version: picked.version ?? '',
+      source: t(`agentModal.providerSource.${picked.source}`),
+    }).replace(/\s+/g, ' '));
+  }
+  for (const result of providerAvailability.values()) {
+    if (!result.available) lines.push(t(`provider.${result.id}.notFound`));
+  }
+  agentProviderStatus.textContent = lines.join(' ');
+  modalSubmit.disabled = picked?.available === false;
 }
 
 /**
@@ -4208,6 +4285,7 @@ function applyProviderToAgentForm() {
   if (!display.chromeAccess) chromeAccessCheck.checked = false;
   const generatedElsewhere = PROVIDER_IDS.some((id) => id !== display.id && providerDisplayFor(id).namePool.includes(agentNameInput.value));
   if (generatedElsewhere) agentNameInput.value = generateAgentName(display.id);
+  renderProviderStatus();
 }
 
 /** Most working directories to offer as one-click picks in the New Agent modal. */
@@ -4239,7 +4317,7 @@ function renderRecentDirs() {
     chip.className = 'chip';
     chip.title = dir;
     chip.textContent = shortDir(dir);
-    chip.addEventListener('click', () => { agentDirInput.value = dir; });
+    chip.addEventListener('click', () => { agentDirInput.value = dir; refreshProviderAvailability(); });
     agentDirRecent.appendChild(chip);
   }
 }
@@ -5164,6 +5242,12 @@ agentNameGenerateBtn.addEventListener('click', () => {
   agentNameInput.value = generateAgentName();
 });
 agentProviderSelect.addEventListener('change', applyProviderToAgentForm);
+// A typed working directory is checked once typing pauses, not per keystroke.
+let providerCheckTimer = null;
+agentDirInput.addEventListener('input', () => {
+  clearTimeout(providerCheckTimer);
+  providerCheckTimer = setTimeout(refreshProviderAvailability, 400);
+});
 agentModelInput.addEventListener('change', () => {
   agentModelCustomInput.hidden = agentModelInput.value !== 'custom';
   if (agentModelInput.value === 'custom') agentModelCustomInput.focus();
@@ -5183,6 +5267,7 @@ browsePathInput.addEventListener('keydown', (e) => {
 browseSelect.addEventListener('click', () => {
   if (browseCurrentPath) agentDirInput.value = browseCurrentPath;
   closeFolderBrowser();
+  refreshProviderAvailability();
 });
 
 noteClose.addEventListener('click', closeNoteModal);
