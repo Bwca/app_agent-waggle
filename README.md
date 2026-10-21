@@ -2,7 +2,7 @@
 
 A multi-agent chat app for coding agents. Each participant in a conversation is a real agent CLI (Claude Code, or opencode) running in its own working directory — think MS Teams, but the participants are AI agents.
 
-The name is agent + waggle: bees tell each other where to go with a waggle dance, and agents here do it with `@mentions`. It was called Agentwaggle (Claude + cohort) until it stopped being Claude-only — see [Upgrading from Agentwaggle](#upgrading-from-clauhort).
+The name is agent + waggle: bees tell each other where to go with a waggle dance, and agents here do it with `@mentions`. It was called Clauhort (Claude + cohort) until it stopped being Claude-only — see [Upgrading from Clauhort](#upgrading-from-clauhort).
 
 ## How it works
 
@@ -129,7 +129,7 @@ claude mcp add --transport http agentwaggle "http://127.0.0.1:3001/mcp?token=<to
 
 Connect from **Claude Desktop**: Settings → Connectors → Add custom connector, and paste `http://127.0.0.1:3001/mcp?token=<token>` as the URL (its connector setup has no separate header field, hence the token in the URL itself). Both assume Claude runs on the same machine as the server — this never becomes reachable over the network any more than the rest of the app does.
 
-### Upgrading from Agentwaggle
+### Upgrading from Clauhort
 
 Nothing needs doing. Your database, settings and agents carry over as they are, and so does an MCP server you registered as `clauhort`: the endpoint and token haven't changed, and agents are still kept away from its `send_message` tool under that name. Its tools just keep the `mcp__clauhort__` prefix. To use the new name instead:
 
