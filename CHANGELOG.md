@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 - Clauhort is now **Agentwaggle**. The old name was Claude + cohort, a swarm of Claudes, which stopped fitting once agents could run as opencode too; the new one is agent + waggle, the dance bees use to tell each other where to go, as agents here do with `@mentions`. Nothing needs doing to upgrade: the database, settings and agents carry over, and an MCP server registered as `clauhort` keeps working. The README's setup command now registers it as `agentwaggle`, and agents are kept away from its `send_message` tool under both names (and `APP_MCP_SERVER_NAME`, if set), so an existing registration doesn't quietly hand them the tool back. See "Upgrading from Clauhort" in the README.
+- The GitHub repository moved to [Bwca/app_agent-waggle](https://github.com/Bwca/app_agent-waggle), following the rename. The app's version badge and Help button, the docs site and the clone instructions point there now. GitHub redirects the old repo links, so an existing clone keeps pulling, though `git remote set-url origin https://github.com/Bwca/app_agent-waggle.git` makes it explicit. The docs site's own address changes with it, and that one has no redirect.
 - Everything a CLI does differently now sits behind its provider: how a turn starts (including a protocol handshake), what a permission grant authorizes, where project slash commands live, and what the UI shows for it. Agents have a stored `provider`; existing agents are Claude. See `AgentProvider` in `server/services/providers/index.js` and `ProviderDisplay` in `server/public/agentProviders.js`.
 
 ### Fixed
@@ -239,9 +240,9 @@ Initial release.
 - Structured logging (pino) with daily file rotation, and an opt-in full transcript log for debugging.
 - SQLite persistence with a one-time import from a legacy `data.json`, if present.
 
-[Unreleased]: https://github.com/Bwca/app_clauhort/compare/v1.1.1...HEAD
-[1.1.1]: https://github.com/Bwca/app_clauhort/compare/v1.1.0...v1.1.1
-[1.1.0]: https://github.com/Bwca/app_clauhort/compare/v1.0.2...v1.1.0
-[1.0.2]: https://github.com/Bwca/app_clauhort/compare/v1.0.1...v1.0.2
-[1.0.1]: https://github.com/Bwca/app_clauhort/compare/v1.0.0...v1.0.1
-[1.0.0]: https://github.com/Bwca/app_clauhort/releases/tag/v1.0.0
+[Unreleased]: https://github.com/Bwca/app_agent-waggle/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/Bwca/app_agent-waggle/compare/v1.1.0...v1.1.1
+[1.1.0]: https://github.com/Bwca/app_agent-waggle/compare/v1.0.2...v1.1.0
+[1.0.2]: https://github.com/Bwca/app_agent-waggle/compare/v1.0.1...v1.0.2
+[1.0.1]: https://github.com/Bwca/app_agent-waggle/compare/v1.0.0...v1.0.1
+[1.0.0]: https://github.com/Bwca/app_agent-waggle/releases/tag/v1.0.0
