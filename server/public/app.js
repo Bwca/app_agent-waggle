@@ -1,5 +1,5 @@
 /**
- * @fileoverview Clauhort — plain JS frontend.
+ * @fileoverview Agentwaggle — plain JS frontend.
  * No build step. Talks to the server via REST + WebSocket.
  */
 
