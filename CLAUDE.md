@@ -51,6 +51,14 @@ npm test -- --grep "agent"                    # filter by name substring
 ```
 Each E2E file starts/stops its own server instance and shares port 3099 — never pass multiple E2E files to `node --test` at once, they'll collide on the port. `tests/run.js` already runs them with `concurrency: 1` for this reason.
 
+Docs site demo clips (`docs/recordings/*.json`, rrweb), recorded against a throwaway server on port 4310 with real `claude` turns (haiku, so a full re-record costs a little real usage):
+```bash
+cd tests && node demos/record.js              # every clip
+node demos/record.js chat-rename model-switch # just these
+DEMO_SCREENSHOTS=/some/dir node demos/record.js  # + a final-frame PNG per clip, for checking by eye
+```
+Re-record after any visible UI change, rather than hand-editing a clip's JSON. Each clip's scenario is in `CLIPS` in `tests/demos/record.js`; dictation's speech is simulated there, since headless Chrome has no microphone.
+
 There is no lint/typecheck script configured (JSDoc types only, no TypeScript build).
 
 Key env vars (see README for the full table): `PORT`, `CLAUDE_BIN` (override the `claude` binary name/path), `APP_DB_FILE` (`:memory:` in tests), `APP_LOG_DIR`, `APP_LOG_LEVEL`, `APP_TRANSCRIPT_LOG` (full per-chat prompt/response logging, off by default), `APP_AUTOCOMPACT` (per-agent `--autocompact` window, default `200k`), `MCP_AUTH_TOKEN` (enables the `/mcp` server, unset = disabled — see "MCP server" below), `APP_MCP_SERVER_NAME` (the name Agentwaggle's MCP server is registered under, default `agentwaggle`, used to keep its `send_message` tool away from spawned agents; the old name `clauhort` is always guarded too).
