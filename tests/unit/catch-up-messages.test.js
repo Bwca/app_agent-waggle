@@ -114,6 +114,19 @@ describe('catchUpMessagesFor', () => {
     const result = catchUpMessagesFor(agent, messages);
     assert.deepEqual(result.map((m) => m.id), ['5'], 'the post-clear reply is a genuine memory boundary, so only what came after it is new');
   });
+
+  test('a teammate joining or leaving goes out as catch-up, unlike other system notes', () => {
+    const agent = { id: 'claudia', name: 'Claudia', resumeId: 'sess-1' };
+    const roster = { authorName: 'System', isSystemNote: true };
+    const messages = [
+      msg('1', 'claudia', 'my last reply'),
+      msg('2', 'oona', '➕ You added Oona [agent oona] to the chat', roster),
+      msg('3', null, '@Oona you\'re alive?'),
+      msg('4', 'oona', '🚪 You removed Oona [agent oona] from the chat', roster),
+      msg('5', 'clarence', '🗜️ Clarence\'s context was compacted (auto): size unreported', { isSystemNote: true }),
+    ];
+    assert.deepEqual(catchUpMessagesFor(agent, messages).map((m) => m.id), ['2', '3', '4']);
+  });
 });
 
 describe('catchUpMessagesFor — seenUntil', () => {
@@ -147,6 +160,12 @@ describe('catchUpMessagesFor — seenUntil', () => {
     const agent = { id: 'claus', name: 'Claus', resumeId: 'sess-2', contextResetAt: '2026-10-16T01:02:00.000Z', seenUntil: '2026-10-16T01:01:00.000Z' };
     const messages = [msg('1', null, 'before the clear', at('2026-10-16T01:00:00.000Z')), msg('2', null, 'after', at('2026-10-16T01:03:00.000Z'))];
     assert.deepEqual(catchUpMessagesFor(agent, messages).map((m) => m.id), ['1', '2']);
+  });
+
+  test('a roster note about the agent itself still goes out — it was re-added, say', () => {
+    const agent = { id: 'claus', name: 'Claus', resumeId: 'sess-1', seenUntil: '2026-10-16T01:01:00.000Z' };
+    const messages = [msg('1', 'claus', '➕ You added Claus [agent claus] to the chat', { ...at('2026-10-16T01:02:00.000Z'), authorName: 'System', isSystemNote: true })];
+    assert.deepEqual(catchUpMessagesFor(agent, messages).map((m) => m.id), ['1']);
   });
 
   test('ignored for an agent with no session yet — the full window still goes out', () => {

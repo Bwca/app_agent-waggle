@@ -445,12 +445,27 @@ function agentRef(agent) {
  * teammate's name included. So it says whether the author is the user or an
  * agent, and which agent by id (the same id the roster gives — see
  * formatRoster).
- * @param {Pick<import('../store/db.js').Message, 'role' | 'agentId' | 'authorName'>} m
+ * @param {Pick<import('../store/db.js').Message, 'role' | 'agentId' | 'authorName' | 'isSystemNote'>} m
  * @returns {string}
  */
 function authorLabel(m) {
   if (m.role === 'user') return `${m.authorName} [user]`;
+  // A roster note's agentId is the agent it's about, not its author. Labelled
+  // with it, "System [agent <Opaline's id>]" read as Opaline speaking.
+  if (isRosterNote(m)) return m.authorName;
   return m.agentId ? agentRef({ name: m.authorName, id: m.agentId }) : m.authorName;
+}
+
+/**
+ * Whether `m` records an agent being added to or removed from the chat
+ * (postAgentAddedNote/postAgentRemovedNote, the only notes authored as
+ * "System"). Unlike the other system notes, which are about one agent's
+ * own session, it's news to every agent in the chat.
+ * @param {Pick<import('../store/db.js').Message, 'authorName' | 'isSystemNote'>} m
+ * @returns {boolean}
+ */
+function isRosterNote(m) {
+  return Boolean(m.isSystemNote) && m.authorName === 'System';
 }
 
 /**
@@ -514,7 +529,7 @@ export function catchUpMessagesFor(agent, messages) {
   // built may or may not have made it in. Re-sending it costs a line;
   // dropping it loses it.
   if (seenUntil && (!agent.contextResetAt || seenUntil > agent.contextResetAt)) {
-    return messages.filter((m) => m.createdAt >= seenUntil && m.agentId !== agent.id && !m.isSystemNote);
+    return messages.filter((m) => m.createdAt >= seenUntil && isCatchUpContent(agent, m));
   }
 
   let lastOwnIdx = -1;
@@ -531,9 +546,23 @@ export function catchUpMessagesFor(agent, messages) {
       && (!agent.contextResetAt || messages[i].createdAt > agent.contextResetAt)
     ) { lastOwnIdx = i; break; }
   }
-  // isSystemNote messages are never catch-up content for anyone — they're a
-  // UI-only aside about one agent, not information another agent needs.
-  return messages.slice(lastOwnIdx + 1).filter((m) => m.agentId !== agent.id && !m.isSystemNote);
+  return messages.slice(lastOwnIdx + 1).filter((m) => isCatchUpContent(agent, m));
+}
+
+/**
+ * Whether a message past an agent's catch-up boundary goes to it: anything
+ * but its own replies (already in its session) and system notes, which are
+ * a UI-only aside about one agent's session. Roster notes are the
+ * exception, since who joined or left is news to everyone. Reported live:
+ * without them, an agent read "@Oona you're alive?" with no sign of who
+ * Oona was, and only learned of a newcomer from the roster block.
+ * @param {import('../store/db.js').Agent} agent
+ * @param {import('../store/db.js').Message} m
+ * @returns {boolean}
+ */
+function isCatchUpContent(agent, m) {
+  if (isRosterNote(m)) return true;
+  return m.agentId !== agent.id && !m.isSystemNote;
 }
 
 /**

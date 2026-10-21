@@ -246,6 +246,9 @@ function transaction(fn) {
  *   bubble) in the frontend — see buildMessageEl in app.js. Excluded from
  *   catch-up/hasSpokenInChat reasoning the same way isLocalCommandOnly is,
  *   for the same reason: nothing here ever reached the model as a real turn.
+ *   The one exception is a roster note (an agent added to or removed from
+ *   the chat), which does go out as catch-up — see ws/handler.js's
+ *   isCatchUpContent.
  * @property {string} createdAt - ISO 8601 timestamp
  */
 
