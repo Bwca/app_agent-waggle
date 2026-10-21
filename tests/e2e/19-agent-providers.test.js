@@ -10,6 +10,8 @@ import assert from 'node:assert/strict';
 import { startServer, stopServer, resetData, TEST_PORT } from '../helpers/server.js';
 import { launchBrowser, closeBrowser, openPage, closePage, tid, createChat, createAgent } from '../helpers/browser.js';
 import { agentDir, cleanupAgentDirs } from '../helpers/fixtures.js';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
 /**
  * Opens the New Agent modal and waits for it.
@@ -18,6 +20,20 @@ import { agentDir, cleanupAgentDirs } from '../helpers/fixtures.js';
 async function openNewAgentModal(page) {
   await page.click(tid('new-agent-btn'));
   await page.waitForFunction(() => !document.querySelector('[data-testid="modal-overlay"]')?.hidden, { timeout: 3000 });
+}
+
+/**
+ * Waits until the provider picker reflects the server's availability check.
+ * @param {import('puppeteer').Page} page
+ */
+function waitForProviderCheck(page) {
+  return page.waitForFunction(
+    () => {
+      const status = document.querySelector('[data-testid="agent-provider-status"]')?.textContent ?? '';
+      return status && !/Checking/.test(status);
+    },
+    { timeout: 5000 },
+  );
 }
 
 /**
@@ -124,5 +140,61 @@ describe('Agent providers', () => {
       const [agent] = await res.json();
       return agent?.modelOverride === 'ollama/local-agent';
     }, { timeout: 5000 }, TEST_PORT);
+  });
+});
+
+describe('Agent providers that are not installed', () => {
+  /** @type {import('puppeteer').Page} */
+  let page;
+
+  before(async () => {
+    // '' rather than a path: no override, so opencode is looked for in the
+    // project, on PATH and in ~/.opencode/bin like on a real machine. A
+    // PATH without it (just node's own directory, which the server needs,
+    // and the system's) keeps the result the same wherever this runs.
+    await startServer({ OPENCODE_BIN: '', HOME: '/nonexistent-home', PATH: `${dirname(process.execPath)}:/usr/bin:/bin` });
+    await launchBrowser();
+  });
+
+  after(async () => {
+    await closeBrowser();
+    await stopServer();
+  });
+
+  beforeEach(async () => {
+    await resetData();
+    if (page) await closePage();
+    page = await openPage();
+    await createChat(page, 'Provider Chat');
+  });
+
+  afterEach(() => {
+    cleanupAgentDirs();
+  });
+
+  test('a provider that can\'t be found is offered disabled, with how to install it', async () => {
+    await openNewAgentModal(page);
+    await waitForProviderCheck(page);
+    const options = await page.$$eval(`${tid('agent-provider-select')} option`, (els) => els.map((el) => ({ value: el.value, disabled: el.disabled, text: el.textContent })));
+    const opencode = options.find((o) => o.value === 'opencode');
+    assert.equal(opencode.disabled, true);
+    assert.match(opencode.text, /not found/);
+    assert.match(await page.$eval(tid('agent-provider-status'), (el) => el.textContent), /opencode wasn't found/);
+  });
+
+  test('a project that pins its own opencode makes it available for that working directory', async () => {
+    const dir = agentDir('pinned');
+    mkdirSync(join(dir, 'node_modules', '.bin'), { recursive: true });
+    writeFileSync(join(dir, 'node_modules', '.bin', 'opencode'), '#!/bin/sh\necho 9.9.9\n', { mode: 0o755 });
+
+    await openNewAgentModal(page);
+    await waitForProviderCheck(page);
+    await page.type(tid('agent-dir-input'), dir);
+    await page.waitForFunction(
+      () => !document.querySelector('[data-testid="agent-provider-select"] option[value="opencode"]')?.disabled,
+      { timeout: 5000 },
+    );
+    await page.select(tid('agent-provider-select'), 'opencode');
+    assert.match(await page.$eval(tid('agent-provider-status'), (el) => el.textContent), /opencode 9\.9\.9 · pinned by this project/);
   });
 });
