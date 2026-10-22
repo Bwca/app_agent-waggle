@@ -308,7 +308,7 @@ export function registerTools(mcpServer, wss) {
         name: z.string().min(1),
         color: z.string().min(1).describe('Hex color, e.g. "#6B8EAD"'),
         workingDir: z.string().min(1).describe('Absolute path to an existing project directory'),
-        provider: z.string().optional().describe(`Which CLI the agent runs as, e.g. "claude" or "opencode" (default "${DEFAULT_PROVIDER_ID}"). Creation-time only.`),
+        provider: z.string().optional().describe(`Which CLI the agent runs as, e.g. "claude", "opencode" or "cursor" (default "${DEFAULT_PROVIDER_ID}"). Creation-time only.`),
         resumeId: z.string().optional().describe("Existing session id to resume, in the provider's own CLI"),
         dangerouslySkipPermissions: z.boolean().optional().describe('YOLO mode'),
         isObserver: z.boolean().optional(),

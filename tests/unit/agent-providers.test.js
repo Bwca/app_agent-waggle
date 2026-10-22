@@ -112,11 +112,14 @@ describe('provider display details', () => {
     }
     assert.equal(PROVIDER_IDS[0], DEFAULT_PROVIDER_ID);
     assert.ok(PROVIDER_IDS.includes('opencode'));
+    assert.ok(PROVIDER_IDS.includes('cursor'));
   });
 
   test('formats each provider\'s model ids its own way', async () => {
     const { providerDisplayFor } = await import('../../server/public/agentProviders.js');
     assert.equal(providerDisplayFor('claude').formatModel('claude-opus-4-1-20250805'), 'Opus 4.1');
     assert.equal(providerDisplayFor('opencode').formatModel('ollama/local-agent'), 'local-agent');
+    assert.equal(providerDisplayFor('cursor').formatModel('grok-4.7[context=256k,reasoning_effort=high,fast=true]'), 'grok-4.7');
+    assert.equal(providerDisplayFor('cursor').formatModel('default[]'), 'Auto');
   });
 });

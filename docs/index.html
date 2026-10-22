@@ -4,9 +4,9 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Agentwaggle — Multi-Agent Chat for Coding Agents</title>
-<meta name="description" content="Agentwaggle is a multi-agent chat app — a group chat where every participant is a real coding-agent CLI (Claude Code or opencode) with its own project, tools, and permissions." />
+<meta name="description" content="Agentwaggle is a multi-agent chat app — a group chat where every participant is a real coding-agent CLI (Claude Code, opencode or Cursor) with its own project, tools, and permissions." />
 <meta property="og:title" content="Agentwaggle — Multi-Agent Chat for Coding Agents" />
-<meta property="og:description" content="A group chat where every participant is a real coding-agent CLI (Claude Code or opencode) — real tools, real MCP servers, real work." />
+<meta property="og:description" content="A group chat where every participant is a real coding-agent CLI (Claude Code, opencode or Cursor) — real tools, real MCP servers, real work." />
 <meta property="og:image" content="assets/logo.png" />
 <meta property="og:type" content="website" />
 <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png" />
@@ -265,7 +265,7 @@
   <div class="wrap">
     <p class="section-kicker" data-i18n="why.kicker">Why Agentwaggle</p>
     <h2 data-i18n="why.h2">Not a sandbox. Not a demo. The real thing.</h2>
-    <p class="section-lede" data-i18n="why.lede">Every agent in an Agentwaggle chat is a genuine, unrestricted coding-agent CLI process (Claude Code or opencode) — the same tool you'd run in a terminal, just given a seat in a group chat.</p>
+    <p class="section-lede" data-i18n="why.lede">Every agent in an Agentwaggle chat is a genuine, unrestricted coding-agent CLI process (Claude Code, opencode or Cursor) — the same tool you'd run in a terminal, just given a seat in a group chat.</p>
     <div class="benefit-grid">
       <div class="benefit-card">
         <span class="icon">⚙️</span>
@@ -307,7 +307,7 @@
       <div class="feature-card"><span class="icon">🕐</span><div><h3 data-i18n="features.f8.title">Scheduled messages</h3><p data-i18n="features.f8.desc">Queue a message for later; an auto-continue toggle re-arms itself automatically after a session-limit reset.</p></div></div>
       <div class="feature-card"><span class="icon">📄</span><div><h3 data-i18n="features.f9.title">Paginated history</h3><p data-i18n="features.f9.desc">Long chats split into forum-style pages instead of one endless scroll, with full-text search across the whole history.</p></div></div>
       <div class="feature-card"><span class="icon">🌐</span><div><h3 data-i18n="features.f10.title">Browser access</h3><p data-i18n="features.f10.desc">Grant a Claude Code agent real control of your Chrome browser via the Claude in Chrome extension — any number of agents at once.</p></div></div>
-      <div class="feature-card"><span class="icon">♻️</span><div><h3 data-i18n="features.f11.title">Persistent sessions</h3><p data-i18n-html="features.f11.desc">Each agent keeps one continuous native session of its CLI, auto-chained across turns — copy its resume command (<code>claude --resume &lt;id&gt;</code>, <code>opencode --session &lt;id&gt;</code>) to pick it up in a terminal.</p></div></div>
+      <div class="feature-card"><span class="icon">♻️</span><div><h3 data-i18n="features.f11.title">Persistent sessions</h3><p data-i18n-html="features.f11.desc">Each agent keeps one continuous native session of its CLI, auto-chained across turns — copy its resume command (<code>claude --resume &lt;id&gt;</code>, <code>opencode --session &lt;id&gt;</code>, <code>cursor-agent --resume &lt;id&gt;</code>) to pick it up in a terminal.</p></div></div>
       <div class="feature-card"><span class="icon">✏️</span><div><h3 data-i18n="features.f12.title">Full chat management</h3><p data-i18n="features.f12.desc">Rename chats in place, delete a chat with an option to clean up its agents too, and browse or search everything after the fact.</p></div></div>
       <div class="feature-card"><span class="icon">⚡</span><div><h3 data-i18n="features.f13.title">Quick messages</h3><p data-i18n="features.f13.desc">Save short snippets you send often and insert one at the cursor with a click — or Alt+1..9 — instead of retyping it; never auto-sent, so there's always a chance to review or tweak it first.</p></div></div>
       <div class="feature-card"><span class="icon">🧠</span><div><h3 data-i18n="features.f14.title">Per-agent model</h3><p data-i18n="features.f14.desc">Pick a model family per agent — Opus, Sonnet, Haiku, Fable, or a custom pinned ID — at creation, or switch it later without losing conversation history.</p></div></div>
@@ -329,7 +329,7 @@
         <div class="num">1</div>
         <div>
           <h3 data-i18n="how.s1.title">Create an agent</h3>
-          <p data-i18n-html="how.s1.desc">Give it a name and point it at a real project directory on disk — that directory is its working scope, the same as if you'd run <code>claude</code> or <code>opencode</code> there yourself.</p>
+          <p data-i18n-html="how.s1.desc">Give it a name and point it at a real project directory on disk — that directory is its working scope, the same as if you'd run <code>claude</code>, <code>opencode</code> or <code>cursor-agent</code> there yourself.</p>
         </div>
       </div>
       <div class="step">
@@ -362,7 +362,7 @@
       </div>
     </div>
     <div class="mechanism-note" data-i18n-html="how.mechanism">
-      <strong>Under the hood:</strong> each agent is a persistent CLI process (<code>claude --print --input-format=stream-json</code> or <code>opencode acp</code>)
+      <strong>Under the hood:</strong> each agent is a persistent CLI process (<code>claude --print --input-format=stream-json</code> <code>opencode acp</code> or <code>cursor-agent acp</code>)
       kept alive across turns, not a fresh spawn per message — so MCP servers and other expensive-to-establish state survive
       between messages instead of reconnecting every time. Prompts are built narrowly per turn (only what an agent doesn't already have
       in its own session memory), since the CLI already remembers its own conversation.
@@ -398,7 +398,7 @@
     <table class="req-table">
       <tr><th data-i18n="get.reqCol">Requirement</th><th data-i18n="get.detailsCol">Details</th></tr>
       <tr><td>Node.js</td><td data-i18n-html="get.reqNode">22.13+ (needed for <code>node:sqlite</code> without a flag — see <code>.nvmrc</code>)</td></tr>
-      <tr><td data-i18n="get.reqCliLabel">Agent CLI</td><td data-i18n-html="get.reqCli"><code>claude</code> (Claude Code) or <code>opencode</code>, at least one: installed, authenticated, and on <code>PATH</code></td></tr>
+      <tr><td data-i18n="get.reqCliLabel">Agent CLI</td><td data-i18n-html="get.reqCli"><code>claude</code> (Claude Code), <code>opencode</code> or <code>cursor-agent</code> (Cursor), at least one: installed, authenticated, and on <code>PATH</code></td></tr>
       <tr><td data-i18n="get.reqOsLabel">OS</td><td data-i18n="get.reqOs">Linux, macOS, or Windows — developed and tested on Linux</td></tr>
     </table>
 
@@ -422,10 +422,10 @@ http://localhost:3001</pre>
       <a href="https://github.com/Bwca/app_agent-waggle/blob/master/LICENSE" target="_blank" rel="noopener">MIT license</a> for the full text.
       The authors and contributors are not liable for any claim, damages, or other liability arising from the software or its use.
       <ul>
-        <li>Agentwaggle itself doesn't read, write, or execute anything on your system. Every agent is a real coding-agent CLI (<code>claude</code> or <code>opencode</code>), installed and authenticated by you, independently of Agentwaggle — and every file edit, shell command, or browser action is carried out by that CLI process under its own permission model. Agentwaggle only launches it, relays messages to it, and displays what it reports back, including its own permission prompts, which you still review and approve yourself. You're solely responsible for what you authorize the CLI to do.</li>
+        <li>Agentwaggle itself doesn't read, write, or execute anything on your system. Every agent is a real coding-agent CLI (<code>claude</code>, <code>opencode</code> or <code>cursor-agent</code>), installed and authenticated by you, independently of Agentwaggle — and every file edit, shell command, or browser action is carried out by that CLI process under its own permission model. Agentwaggle only launches it, relays messages to it, and displays what it reports back, including its own permission prompts, which you still review and approve yourself. You're solely responsible for what you authorize the CLI to do.</li>
         <li>No guarantee of correctness, security, or availability — back up anything you can't afford to lose.</li>
-        <li>Any usage charges, rate limits, or outages of the model providers your agents use (Anthropic, opencode, or others) are between you and them, not this project.</li>
-        <li>Agentwaggle is an independent project, not affiliated with, endorsed by, or sponsored by Anthropic or opencode. "Claude" and "Claude Code" are Anthropic trademarks, referenced only to describe compatibility.</li>
+        <li>Any usage charges, rate limits, or outages of the model providers your agents use (Anthropic, opencode, Cursor, or others) are between you and them, not this project.</li>
+        <li>Agentwaggle is an independent project, not affiliated with, endorsed by, or sponsored by Anthropic, opencode or Cursor. "Claude" and "Claude Code" are Anthropic trademarks, referenced only to describe compatibility.</li>
       </ul>
       You use this software entirely at your own risk. Full text in the
       <a href="https://github.com/Bwca/app_agent-waggle#disclaimer" target="_blank" rel="noopener">README</a>.
@@ -466,7 +466,7 @@ http://localhost:3001</pre>
 
       'why.kicker': 'Why Agentwaggle',
       'why.h2': 'Not a sandbox. Not a demo. The real thing.',
-      'why.lede': "Every agent in an Agentwaggle chat is a genuine, unrestricted coding-agent CLI process (Claude Code or opencode) — the same tool you'd run in a terminal, just given a seat in a group chat.",
+      'why.lede': "Every agent in an Agentwaggle chat is a genuine, unrestricted coding-agent CLI process (Claude Code, opencode or Cursor) — the same tool you'd run in a terminal, just given a seat in a group chat.",
       'why.b1.title': 'Full tool access, per agent',
       'why.b1.desc': 'Each agent runs against its own working directory with its own real tools, skills, and MCP servers — nothing stripped down or simulated for the chat UI.',
       'why.b2.title': 'Agents that work together',
@@ -500,7 +500,7 @@ http://localhost:3001</pre>
       'features.f10.title': 'Browser access',
       'features.f10.desc': 'Grant a Claude Code agent real control of your Chrome browser via the Claude in Chrome extension — any number of agents at once.',
       'features.f11.title': 'Persistent sessions',
-      'features.f11.desc': 'Each agent keeps one continuous native session of its CLI, auto-chained across turns — copy its resume command (<code>claude --resume &lt;id&gt;</code>, <code>opencode --session &lt;id&gt;</code>) to pick it up in a terminal.',
+      'features.f11.desc': 'Each agent keeps one continuous native session of its CLI, auto-chained across turns — copy its resume command (<code>claude --resume &lt;id&gt;</code>, <code>opencode --session &lt;id&gt;</code>, <code>cursor-agent --resume &lt;id&gt;</code>) to pick it up in a terminal.',
       'features.f12.title': 'Full chat management',
       'features.f12.desc': 'Rename chats in place, delete a chat with an option to clean up its agents too, and browse or search everything after the fact.',
       'features.f13.title': 'Quick messages',
@@ -520,7 +520,7 @@ http://localhost:3001</pre>
       'how.h2': 'From an empty chat to a working team',
       'how.lede': 'The mental model is closer to Slack than to a chatbot widget — the difference is that every participant can actually do the work.',
       'how.s1.title': 'Create an agent',
-      'how.s1.desc': "Give it a name and point it at a real project directory on disk — that directory is its working scope, the same as if you'd run <code>claude</code> or <code>opencode</code> there yourself.",
+      'how.s1.desc': "Give it a name and point it at a real project directory on disk — that directory is its working scope, the same as if you'd run <code>claude</code>, <code>opencode</code> or <code>cursor-agent</code> there yourself.",
       'how.s2.title': 'Group agents into a chat',
       'how.s2.desc': 'One agent, or several — mix agents from different projects in the same conversation if the work spans more than one codebase.',
       'how.s3.title': 'Send a message',
@@ -529,7 +529,7 @@ http://localhost:3001</pre>
       'how.s4.desc': 'Streamed replies, real tool-call status, and inline permission prompts — a denied tool call surfaces a Grant/Deny card without breaking the conversation.',
       'how.s5.title': 'Let agents hand off work',
       'how.s5.desc': "Any agent's reply can <code>@mention</code> a teammate to pull them into the thread — useful for splitting a task across agents scoped to different parts of a project.",
-      'how.mechanism': `<strong>Under the hood:</strong> each agent is a persistent CLI process (<code>claude --print --input-format=stream-json</code> or <code>opencode acp</code>)
+      'how.mechanism': `<strong>Under the hood:</strong> each agent is a persistent CLI process (<code>claude --print --input-format=stream-json</code> <code>opencode acp</code> or <code>cursor-agent acp</code>)
       kept alive across turns, not a fresh spawn per message — so MCP servers and other expensive-to-establish state survive
       between messages instead of reconnecting every time. Prompts are built narrowly per turn (only what an agent doesn't already have
       in its own session memory), since the CLI already remembers its own conversation.`,
@@ -578,7 +578,7 @@ http://localhost:3001</pre>
       'get.reqCol': 'Requirement', 'get.detailsCol': 'Details',
       'get.reqNode': '22.13+ (needed for <code>node:sqlite</code> without a flag — see <code>.nvmrc</code>)',
       'get.reqCliLabel': 'Agent CLI',
-      'get.reqCli': '<code>claude</code> (Claude Code) or <code>opencode</code>, at least one: installed, authenticated, and on <code>PATH</code>',
+      'get.reqCli': '<code>claude</code> (Claude Code), <code>opencode</code> or <code>cursor-agent</code> (Cursor), at least one: installed, authenticated, and on <code>PATH</code>',
       'get.reqOsLabel': 'OS',
       'get.reqOs': 'Linux, macOS, or Windows — developed and tested on Linux',
       'get.comment1': '# clone, install, run',
@@ -590,10 +590,10 @@ http://localhost:3001</pre>
       <a href="https://github.com/Bwca/app_agent-waggle/blob/master/LICENSE" target="_blank" rel="noopener">MIT license</a> for the full text.
       The authors and contributors are not liable for any claim, damages, or other liability arising from the software or its use.
       <ul>
-        <li>Agentwaggle itself doesn't read, write, or execute anything on your system. Every agent is a real coding-agent CLI (<code>claude</code> or <code>opencode</code>), installed and authenticated by you, independently of Agentwaggle — and every file edit, shell command, or browser action is carried out by that CLI process under its own permission model. Agentwaggle only launches it, relays messages to it, and displays what it reports back, including its own permission prompts, which you still review and approve yourself. You're solely responsible for what you authorize the CLI to do.</li>
+        <li>Agentwaggle itself doesn't read, write, or execute anything on your system. Every agent is a real coding-agent CLI (<code>claude</code>, <code>opencode</code> or <code>cursor-agent</code>), installed and authenticated by you, independently of Agentwaggle — and every file edit, shell command, or browser action is carried out by that CLI process under its own permission model. Agentwaggle only launches it, relays messages to it, and displays what it reports back, including its own permission prompts, which you still review and approve yourself. You're solely responsible for what you authorize the CLI to do.</li>
         <li>No guarantee of correctness, security, or availability — back up anything you can't afford to lose.</li>
-        <li>Any usage charges, rate limits, or outages of the model providers your agents use (Anthropic, opencode, or others) are between you and them, not this project.</li>
-        <li>Agentwaggle is an independent project, not affiliated with, endorsed by, or sponsored by Anthropic or opencode. "Claude" and "Claude Code" are Anthropic trademarks, referenced only to describe compatibility.</li>
+        <li>Any usage charges, rate limits, or outages of the model providers your agents use (Anthropic, opencode, Cursor, or others) are between you and them, not this project.</li>
+        <li>Agentwaggle is an independent project, not affiliated with, endorsed by, or sponsored by Anthropic, opencode or Cursor. "Claude" and "Claude Code" are Anthropic trademarks, referenced only to describe compatibility.</li>
       </ul>
       You use this software entirely at your own risk. Full text in the
       <a href="https://github.com/Bwca/app_agent-waggle#disclaimer" target="_blank" rel="noopener">README</a>.`,
@@ -613,7 +613,7 @@ http://localhost:3001</pre>
 
       'why.kicker': 'Pourquoi Agentwaggle',
       'why.h2': 'Pas un bac à sable. Pas une démo. La vraie chose.',
-      'why.lede': "Chaque agent d'une discussion Agentwaggle est un véritable processus CLI d'agent de code (Claude Code ou opencode), sans restriction — le même outil que vous exécuteriez dans un terminal, à qui l'on a simplement donné une place dans une discussion de groupe.",
+      'why.lede': "Chaque agent d'une discussion Agentwaggle est un véritable processus CLI d'agent de code (Claude Code, opencode ou Cursor), sans restriction — le même outil que vous exécuteriez dans un terminal, à qui l'on a simplement donné une place dans une discussion de groupe.",
       'why.b1.title': 'Accès complet aux outils, par agent',
       'why.b1.desc': "Chaque agent s'exécute dans son propre répertoire de travail avec ses propres outils, compétences et serveurs MCP réels — rien n'est simplifié ni simulé pour l'interface de discussion.",
       'why.b2.title': 'Des agents qui travaillent ensemble',
@@ -647,7 +647,7 @@ http://localhost:3001</pre>
       'features.f10.title': 'Accès au navigateur',
       'features.f10.desc': "Accordez à un agent Claude Code le contrôle réel de votre navigateur Chrome via l'extension Claude in Chrome — autant d'agents que vous voulez à la fois.",
       'features.f11.title': 'Sessions persistantes',
-      'features.f11.desc': "Chaque agent conserve une seule session native continue de sa CLI, enchaînée automatiquement entre les tours — copiez sa commande de reprise (<code>claude --resume &lt;id&gt;</code>, <code>opencode --session &lt;id&gt;</code>) pour la reprendre dans un terminal.",
+      'features.f11.desc': "Chaque agent conserve une seule session native continue de sa CLI, enchaînée automatiquement entre les tours — copiez sa commande de reprise (<code>claude --resume &lt;id&gt;</code>, <code>opencode --session &lt;id&gt;</code>, <code>cursor-agent --resume &lt;id&gt;</code>) pour la reprendre dans un terminal.",
       'features.f12.title': 'Gestion complète des discussions',
       'features.f12.desc': "Renommez les discussions sur place, supprimez-en une avec l'option de nettoyer aussi ses agents, et parcourez ou recherchez tout après coup.",
       'features.f13.title': 'Messages rapides',
@@ -667,7 +667,7 @@ http://localhost:3001</pre>
       'how.h2': "D'une discussion vide à une équipe fonctionnelle",
       'how.lede': "Le modèle mental se rapproche davantage de Slack que d'un widget de clavardage — à la différence que chaque participant peut réellement accomplir le travail.",
       'how.s1.title': 'Créer un agent',
-      'how.s1.desc': "Donnez-lui un nom et pointez-le vers un véritable répertoire de projet sur le disque — ce répertoire devient sa portée de travail, exactement comme si vous y aviez lancé <code>claude</code> ou <code>opencode</code> vous-même.",
+      'how.s1.desc': "Donnez-lui un nom et pointez-le vers un véritable répertoire de projet sur le disque — ce répertoire devient sa portée de travail, exactement comme si vous y aviez lancé <code>claude</code>, <code>opencode</code> ou <code>cursor-agent</code> vous-même.",
       'how.s2.title': 'Regrouper des agents dans une discussion',
       'how.s2.desc': "Un seul agent, ou plusieurs — mélangez des agents de différents projets dans la même conversation si le travail touche plus d'une base de code.",
       'how.s3.title': 'Envoyer un message',
@@ -676,7 +676,7 @@ http://localhost:3001</pre>
       'how.s4.desc': "Réponses diffusées en continu, vrai statut des appels d'outils et invites de permission intégrées — un appel d'outil refusé affiche une carte Autoriser/Refuser sans interrompre la conversation.",
       'how.s5.title': 'Laisser les agents se relayer le travail',
       'how.s5.desc': "La réponse de n'importe quel agent peut <code>@mentionner</code> un coéquipier pour l'inclure dans le fil — utile pour répartir une tâche entre des agents dédiés à différentes parties d'un projet.",
-      'how.mechanism': `<strong>Sous le capot :</strong> chaque agent est un processus CLI persistant (<code>claude --print --input-format=stream-json</code> ou <code>opencode acp</code>),
+      'how.mechanism': `<strong>Sous le capot :</strong> chaque agent est un processus CLI persistant (<code>claude --print --input-format=stream-json</code> <code>opencode acp</code> ou <code>cursor-agent acp</code>),
       maintenu actif d'un tour à l'autre plutôt que relancé à chaque message — les serveurs MCP et autres états coûteux à établir
       survivent donc entre les messages au lieu de se reconnecter à chaque fois. Les invites sont construites de façon ciblée à chaque tour
       (seulement ce qu'un agent n'a pas déjà dans sa propre mémoire de session), puisque la CLI se souvient déjà de sa propre conversation.`,
@@ -725,7 +725,7 @@ http://localhost:3001</pre>
       'get.reqCol': 'Exigence', 'get.detailsCol': 'Détails',
       'get.reqNode': '22.13+ (requis pour <code>node:sqlite</code> sans indicateur — voir <code>.nvmrc</code>)',
       'get.reqCliLabel': "CLI d'agent",
-      'get.reqCli': '<code>claude</code> (Claude Code) ou <code>opencode</code>, au moins une : installée, authentifiée et présente dans le <code>PATH</code>',
+      'get.reqCli': '<code>claude</code> (Claude Code), <code>opencode</code> ou <code>cursor-agent</code> (Cursor), au moins une : installée, authentifiée et présente dans le <code>PATH</code>',
       'get.reqOsLabel': 'SE',
       'get.reqOs': 'Linux, macOS ou Windows — développé et testé sur Linux',
       'get.comment1': '# cloner, installer, lancer',
@@ -737,10 +737,10 @@ http://localhost:3001</pre>
       <a href="https://github.com/Bwca/app_agent-waggle/blob/master/LICENSE" target="_blank" rel="noopener">licence MIT</a> pour le texte complet.
       Les auteurs et contributeurs ne sont pas responsables des réclamations, dommages ou autres responsabilités découlant du logiciel ou de son utilisation.
       <ul>
-        <li>Agentwaggle lui-même ne lit, n'écrit ni n'exécute rien sur votre système. Chaque agent est un véritable CLI d'agent de code (<code>claude</code> ou <code>opencode</code>), installé et authentifié par vous, indépendamment d'Agentwaggle — et chaque modification de fichier, commande shell ou action de navigateur est exécutée par ce processus CLI selon son propre modèle de permissions. Agentwaggle ne fait que le lancer, lui relayer les messages et afficher ce qu'il rapporte, y compris ses propres invites de permission, que vous devez toujours vérifier et approuver vous-même. Vous êtes seul responsable de ce que vous autorisez la CLI à faire.</li>
+        <li>Agentwaggle lui-même ne lit, n'écrit ni n'exécute rien sur votre système. Chaque agent est un véritable CLI d'agent de code (<code>claude</code>, <code>opencode</code> ou <code>cursor-agent</code>), installé et authentifié par vous, indépendamment d'Agentwaggle — et chaque modification de fichier, commande shell ou action de navigateur est exécutée par ce processus CLI selon son propre modèle de permissions. Agentwaggle ne fait que le lancer, lui relayer les messages et afficher ce qu'il rapporte, y compris ses propres invites de permission, que vous devez toujours vérifier et approuver vous-même. Vous êtes seul responsable de ce que vous autorisez la CLI à faire.</li>
         <li>Aucune garantie d'exactitude, de sécurité ou de disponibilité — faites des sauvegardes de tout ce que vous ne pouvez pas vous permettre de perdre.</li>
-        <li>Les frais d'utilisation, les limites de débit ou les pannes des fournisseurs de modèles qu'utilisent vos agents (Anthropic, opencode ou autres) sont une affaire entre vous et eux, pas ce projet.</li>
-        <li>Agentwaggle est un projet indépendant, non affilié à, ni endossé ni commandité par Anthropic ou opencode. « Claude » et « Claude Code » sont des marques de commerce d'Anthropic, mentionnées uniquement pour décrire la compatibilité.</li>
+        <li>Les frais d'utilisation, les limites de débit ou les pannes des fournisseurs de modèles qu'utilisent vos agents (Anthropic, opencode, Cursor ou autres) sont une affaire entre vous et eux, pas ce projet.</li>
+        <li>Agentwaggle est un projet indépendant, non affilié à, ni endossé ni commandité par Anthropic, opencode ou Cursor. « Claude » et « Claude Code » sont des marques de commerce d'Anthropic, mentionnées uniquement pour décrire la compatibilité.</li>
       </ul>
       Vous utilisez ce logiciel entièrement à vos propres risques. Texte complet dans le
       <a href="https://github.com/Bwca/app_agent-waggle#disclaimer" target="_blank" rel="noopener">README</a>.`,

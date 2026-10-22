@@ -75,7 +75,7 @@ describe('Agent providers', () => {
   test('the form offers every provider, Claude first, with Claude-only options shown', async () => {
     await openNewAgentModal(page);
     const options = await page.$$eval(`${tid('agent-provider-select')} option`, (els) => els.map((el) => el.value));
-    assert.deepEqual(options, ['claude', 'opencode']);
+    assert.deepEqual(options, ['claude', 'opencode', 'cursor']);
     assert.equal(await page.$eval(tid('agent-provider-select'), (el) => el.value), 'claude');
     assert.equal(await isShown(page, tid('agent-model-select')), true);
     assert.equal(await isShown(page, tid('agent-autocompact-input')), true);

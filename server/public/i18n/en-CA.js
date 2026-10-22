@@ -102,6 +102,7 @@ export default {
   'agentModal.providerSource.home': 'in your home folder',
   'provider.claude.notFound': "Claude Code wasn't found. Install it and make sure `claude` is on PATH, or set CLAUDE_BIN.",
   'provider.opencode.notFound': "opencode wasn't found. Install it, pick a project that pins it (npm i -D opencode-ai), or set OPENCODE_BIN.",
+  'provider.cursor.notFound': "Cursor's CLI wasn't found. Install it (curl https://cursor.com/install -fsS | bash) and run `cursor-agent login`, or set CURSOR_AGENT_BIN.",
   'agentModal.resumePlaceholder': 'e.g. multi-agent-claude-chat',
   'agentModal.modelLabel': 'Model',
   'agentModal.autocompactLabel': "Compaction window",
