@@ -19,6 +19,14 @@ child.on('error', (err) => {
   console.error(err.message);
   process.exit(1);
 });
+// Exiting before answering (not logged in, or not really cursor-agent)
+// would otherwise leave this waiting until listProviderModels times out.
+child.on('exit', (code) => {
+  console.error(`cursor-agent acp exited (${code}) before listing models`);
+  process.exit(1);
+});
+// Writing to a process that already exited; the exit handler reports it.
+child.stdin.on('error', () => {});
 
 let nextId = 1;
 /** @type {Map<number, (message: any) => void>} */
