@@ -36,6 +36,7 @@
 import { existsSync } from 'fs';
 import { homedir } from 'os';
 import { basename, delimiter, dirname, join, relative, isAbsolute } from 'path';
+import { fileURLToPath } from 'url';
 import { commandPrefixes } from './shellCommands.js';
 
 /** @typedef {import('./index.js').TurnAccumulator} TurnAccumulator */
@@ -79,6 +80,9 @@ const PLAN_LIMIT_REPLY = /^upgrade your plan to continue\.?$/i;
  * server inherits, so it's checked by path rather than left to PATH.
  */
 const HOME_INSTALL_BIN = join(homedir(), '.local', 'bin', 'cursor-agent');
+
+/** The script that prints the models a Cursor session offers (modelsCommand). */
+const MODELS_SCRIPT = fileURLToPath(new URL('./cursorModels.js', import.meta.url));
 
 /**
  * Finds an executable on PATH, the way a shell would.
@@ -645,6 +649,9 @@ export const cursorProvider = {
     const { command, source } = locateBin();
     return { command, args: ['--version'], source };
   },
+  // Not `cursor-agent models`: its ids ("cursor-grok-4.6-medium") aren't
+  // ones an ACP session accepts. The script asks a session instead.
+  modelsCommand: () => ({ command: process.execPath, args: [MODELS_SCRIPT, locateBin().command] }),
   startTurn,
   parseLine,
   createProcessState,

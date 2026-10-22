@@ -53,6 +53,12 @@ describe('Cursor provider', () => {
     assert.deepEqual(args, ['acp']);
   });
 
+  test('lists its models through a session, not `cursor-agent models`', () => {
+    const { command, args } = cursorProvider.modelsCommand(AGENT);
+    assert.equal(command, process.execPath);
+    assert.match(args[0], /cursorModels\.js$/);
+  });
+
   test('handshakes and logs in on the first turn, then prompts the new session', async () => {
     const connection = connect();
     const { state, sent, receive } = connection;
