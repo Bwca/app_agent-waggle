@@ -304,6 +304,19 @@ describe('Cursor permission requests', () => {
     assert.equal(decidePermission(agent, { tool_name: 'Shell', tool_input: { command: 'npm publish' } }), false);
   });
 
+  test('a granted command covers the same command with more arguments, like a Claude Bash pattern', () => {
+    const agent = { ...AGENT, allowedToolPatterns: cursorProvider.grantFor('Shell', 'date').patterns };
+    assert.equal(decidePermission(agent, { tool_name: 'Shell', tool_input: { command: 'date -u' } }), true);
+    assert.equal(decidePermission(agent, { tool_name: 'Shell', tool_input: { command: 'datefudge 2020' } }), false);
+    assert.equal(decidePermission(agent, { tool_name: 'Shell', tool_input: { command: 'date && rm -rf /' } }), false);
+  });
+
+  test('a two-word grant covers only that subcommand', () => {
+    const agent = { ...AGENT, allowedToolPatterns: ['Shell(git add:*)'] };
+    assert.equal(decidePermission(agent, { tool_name: 'Shell', tool_input: { command: 'git add -A' } }), true);
+    assert.equal(decidePermission(agent, { tool_name: 'Shell', tool_input: { command: 'git push --force' } }), false);
+  });
+
   test('file tools are allowed inside the working directory and granted directories only', () => {
     const agent = { ...AGENT, extraAllowedPaths: ['/shared'] };
     const edit = (path) => ({ tool_name: 'Edit', tool_input: { file_path: path } });

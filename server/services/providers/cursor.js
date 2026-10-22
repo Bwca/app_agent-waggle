@@ -366,8 +366,8 @@ function describeRequest(state, toolCall) {
  * Answers a permission request from the agent's stored grants, the way
  * Claude's spawn flags would: everything under YOLO mode; a file tool on a
  * path inside the working directory or a granted directory (Claude's
- * acceptEdits); a command whose every sub-command has a granted pattern;
- * any other tool granted by name.
+ * acceptEdits); a command whose every sub-command a granted pattern
+ * covers; any other tool granted by name.
  * @param {import('../../store/db.js').Agent} agent
  * @param {PermissionDenial} call
  * @returns {boolean}
@@ -381,15 +381,21 @@ export function decidePermission(agent, call) {
     return [agent.workingDir, ...(agent.extraAllowedPaths ?? [])].some((dir) => isWithin(path, dir));
   }
   if (typeof command === 'string') {
-    const patterns = deriveToolPatterns(call.tool_name, command);
-    return patterns.length > 0 && patterns.every((pattern) => granted.has(pattern));
+    const grantedPrefixes = [...granted].flatMap((pattern) => {
+      const match = pattern.match(/^(.+?)\((.+):\*\)$/);
+      return match && match[1] === call.tool_name ? [match[2]] : [];
+    });
+    const prefixes = commandPrefixes(command);
+    return prefixes.length > 0 && prefixes.every((prefix) => grantedPrefixes.some((grant) => prefix === grant || prefix.startsWith(`${grant} `)));
   }
   return false;
 }
 
 /**
  * The patterns granting a command authorizes, one per sub-command, in this
- * provider's own syntax ("Shell(git add:*)"). Only this file reads them back.
+ * provider's own syntax ("Shell(git add:*)"). Only this file reads them back,
+ * as prefixes like Claude's Bash patterns: "Shell(date:*)" covers "date -u"
+ * too.
  * @param {string} name
  * @param {string} command
  * @returns {string[]}
