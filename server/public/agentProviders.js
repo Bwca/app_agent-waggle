@@ -86,6 +86,22 @@ const PROVIDER_DISPLAYS = {
     // "provider/model" — the model part is what tells agents apart.
     formatModel: (model) => model.split('/').pop() || model,
   },
+  cursor: {
+    id: 'cursor',
+    label: 'Cursor',
+    icon: '↖',
+    namePool: [
+      'Curtis', 'Curt', 'Curie', 'Curran', 'Curzon', 'Curtiss', 'Curry', 'Curla',
+      'Curtina', 'Curio', 'Curwen', 'Curley', 'Currie', 'Curtana', 'Cursa',
+    ],
+    modelAliases: null,
+    modelExample: 'grok-4.7',
+    autocompact: false,
+    chromeAccess: false,
+    resumeCommand: (resumeId) => `cursor-agent --resume ${resumeId}`,
+    // "grok-4.7[context=256k,…]" — the settings in brackets are noise here.
+    formatModel: (model) => (model === 'default[]' ? 'Auto' : model.split('[')[0] || model),
+  },
 };
 
 /** Every provider id the UI knows, default first. */

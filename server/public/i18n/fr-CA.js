@@ -102,6 +102,7 @@ export default {
   'agentModal.providerSource.home': 'dans votre dossier personnel',
   'provider.claude.notFound': 'Claude Code est introuvable. Installez-le et assurez-vous que `claude` est dans le PATH, ou définissez CLAUDE_BIN.',
   'provider.opencode.notFound': 'opencode est introuvable. Installez-le, choisissez un projet qui l’épingle (npm i -D opencode-ai), ou définissez OPENCODE_BIN.',
+  'provider.cursor.notFound': 'La CLI de Cursor est introuvable. Installez-la (curl https://cursor.com/install -fsS | bash) puis lancez `cursor-agent login`, ou définissez CURSOR_AGENT_BIN.',
   'agentModal.resumePlaceholder': 'p. ex. multi-agent-claude-chat',
   'agentModal.modelLabel': 'Modèle',
   'agentModal.autocompactLabel': "Fenêtre de compaction",
