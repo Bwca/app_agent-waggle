@@ -223,7 +223,8 @@ describe('Cursor provider', () => {
 });
 
 describe('Cursor permission requests', () => {
-  // Recorded: Cursor's first request to this client has id 0.
+  // Recorded: Cursor's first request to this client has id 0, and its tool
+  // call has no rawInput; that was on the tool_call update before it.
   const ask = (toolCall) => ({
     id: 0,
     method: 'session/request_permission',
@@ -238,9 +239,12 @@ describe('Cursor permission requests', () => {
     },
   });
 
+  const requested = (toolCallId, command) => ({ toolCallId, title: `\`${command}\``, kind: 'execute', status: 'pending', content: [{ type: 'content', content: { type: 'text', text: 'Not in allowlist' } }] });
+
   test('rejects an ungranted command and reports it as a denial', () => {
     const { sent, receive } = connect();
-    const event = receive(ask({ toolCallId: 't1', title: '`touch x`', kind: 'execute', status: 'pending', content: [{ type: 'content', content: { type: 'text', text: 'Not in allowlist: touch' } }], rawInput: { command: 'touch x' } }));
+    receive(update('tool_call', { toolCallId: 't1', title: '`touch x`', kind: 'execute', status: 'pending', rawInput: { command: 'touch x' } }));
+    const event = receive(ask(requested('t1', 'touch x')));
 
     assert.deepEqual(sent.at(-1), { jsonrpc: '2.0', id: 0, result: { outcome: { outcome: 'selected', optionId: 'reject-once' } } });
     assert.deepEqual(event, { type: 'permission_denied', denial: { tool_name: 'Shell', tool_use_id: 't1', tool_input: { command: 'touch x' } } });
@@ -255,7 +259,7 @@ describe('Cursor permission requests', () => {
       if (event) turn.handleEvent(event);
     };
     feed(update('tool_call', { toolCallId: 't1', title: '`touch x`', kind: 'execute', status: 'pending', rawInput: { command: 'touch x' } }));
-    feed(ask({ toolCallId: 't1', title: '`touch x`', kind: 'execute', rawInput: { command: 'touch x' } }));
+    feed(ask(requested('t1', 'touch x')));
     feed(update('tool_call_update', { toolCallId: 't1', status: 'completed' }));
     feed(update('agent_message_chunk', { content: { type: 'text', text: 'The command was rejected.' } }));
     feed({ id: 5, result: { stopReason: 'end_turn' } });
@@ -268,9 +272,28 @@ describe('Cursor permission requests', () => {
   test('allows a command once every sub-command is granted, and consumes the request', () => {
     const agent = { ...AGENT, allowedToolPatterns: ['Shell(git add:*)', 'Shell(git commit:*)'] };
     const { sent, receive } = connect(agent);
-    const event = receive(ask({ toolCallId: 't2', kind: 'execute', rawInput: { command: 'git add -A && git commit -m x' } }));
+    receive(update('tool_call', { toolCallId: 't2', title: '`git add -A && git commit -m x`', kind: 'execute', status: 'pending', rawInput: { command: 'git add -A && git commit -m x' } }));
+    const event = receive(ask(requested('t2', 'git add -A && git commit -m x')));
     assert.equal(event, null);
     assert.equal(sent.at(-1).result.outcome.optionId, 'allow-once');
+  });
+
+  test('without a tool_call update first, the command comes from the request\'s title', () => {
+    // Found live: answering from the request alone saw no command, so a
+    // granted one was refused again, and the card would have offered to
+    // grant the whole Shell tool.
+    const agent = { ...AGENT, allowedToolPatterns: ['Shell(date:*)'] };
+    const { receive } = connect(agent);
+    assert.equal(receive(ask(requested('t3', 'date'))), null);
+    const denied = connect().receive(ask(requested('t4', 'date')));
+    assert.deepEqual(denied.denial.tool_input, { command: 'date' });
+  });
+
+  test('a file call\'s path comes from its tool_call update', () => {
+    const { receive } = connect();
+    receive(update('tool_call', { toolCallId: 't5', title: 'Edit hosts', kind: 'edit', status: 'pending', rawInput: { path: '/etc/hosts' } }));
+    const event = receive(ask({ toolCallId: 't5', title: 'Edit hosts', kind: 'edit', status: 'pending' }));
+    assert.deepEqual(event.denial, { tool_name: 'Edit', tool_use_id: 't5', tool_input: { file_path: '/etc/hosts' } });
   });
 
   test('grants follow the provider\'s own pattern syntax, which the decision reads back', () => {

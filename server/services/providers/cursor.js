@@ -22,7 +22,8 @@
  *   or cost is reported.
  * - Permission prompts arrive mid-turn as `session/request_permission`
  *   (the first with JSON-RPC id 0), answered from the agent's stored grants
- *   (see decidePermission). A rejected call is still reported "completed",
+ *   (see decidePermission). The request's tool call has no rawInput: the
+ *   command or path is only on the tool_call update that came before it. A rejected call is still reported "completed",
  *   with no output, and the model ends its turn normally.
  * - A model the account's plan doesn't allow (a free plan only allows
  *   Auto) isn't an error: the whole reply is "Upgrade your plan to
@@ -155,6 +156,8 @@ export function rpcErrorText(error) {
  * @property {string | null} model - The session's current model value.
  * @property {string[]} modelValues - Every model value the session offers.
  * @property {number | null} promptId - The in-flight session/prompt request.
+ * @property {Map<string, Record<string, unknown>>} toolInputs - rawInput per
+ *   toolCallId, for the permission request that follows (see describeRequest).
  */
 
 /**
@@ -174,6 +177,7 @@ function createProcessState(agent, { write }) {
     model: null,
     modelValues: [],
     promptId: null,
+    toolInputs: new Map(),
   };
 }
 
@@ -326,13 +330,31 @@ function toolName(toolCall) {
 }
 
 /**
+ * A permission request's tool input: its own rawInput if it ever has one,
+ * else the one its tool_call update reported, else a command recovered from
+ * an execute call's title ("`date -u`"). Without one, the card would offer
+ * to grant the whole tool instead of the command it asked about.
+ * @param {CursorState} state
+ * @param {{ toolCallId: string, kind?: string, title?: string, rawInput?: Record<string, unknown> }} toolCall
+ * @returns {Record<string, unknown>}
+ */
+function requestInput(state, toolCall) {
+  if (toolCall.rawInput && Object.keys(toolCall.rawInput).length) return toolCall.rawInput;
+  const reported = state.toolInputs.get(toolCall.toolCallId);
+  if (reported) return reported;
+  const titled = toolCall.kind === 'execute' && toolCall.title?.match(/^`(.+)`$/s);
+  return titled ? { command: titled[1] } : {};
+}
+
+/**
  * Describes a permission request's tool call the way a denial records it,
  * so the permission card shows a path or a command like it does for Claude.
+ * @param {CursorState} state
  * @param {{ toolCallId: string, kind?: string, title?: string, rawInput?: Record<string, unknown>, locations?: { path: string }[] }} toolCall
  * @returns {PermissionDenial}
  */
-function describeRequest(toolCall) {
-  const input = toolCall.rawInput ?? {};
+function describeRequest(state, toolCall) {
+  const input = requestInput(state, toolCall);
   const path = input.path ?? input.filePath ?? toolCall.locations?.[0]?.path;
   let toolInput = input;
   if (typeof input.command === 'string') toolInput = { command: input.command };
@@ -405,7 +427,7 @@ function answerRequest(state, message) {
     return null;
   }
   const options = message.params?.options ?? [];
-  const call = describeRequest(message.params?.toolCall ?? {});
+  const call = describeRequest(state, message.params?.toolCall ?? {});
   const allowed = decidePermission(state.agent, call);
   const optionId = pickOption(options, allowed ? 'allow' : 'reject');
   const outcome = optionId ? { outcome: 'selected', optionId } : { outcome: 'cancelled' };
@@ -453,6 +475,12 @@ function normalizeEvent(state, message) {
   if (message.method !== 'session/update') return null;
   const update = message.params?.update ?? {};
   if (update.sessionUpdate === 'config_option_update') readConfigOptions(state, update.configOptions);
+  if (update.sessionUpdate === 'tool_call' && !state.replaying && update.toolCallId && update.rawInput) {
+    state.toolInputs.set(update.toolCallId, update.rawInput);
+  }
+  if (update.sessionUpdate === 'tool_call_update' && (update.status === 'completed' || update.status === 'failed')) {
+    state.toolInputs.delete(update.toolCallId);
+  }
   if (state.replaying && TURN_UPDATES.has(update.sessionUpdate)) return null;
   return message;
 }
