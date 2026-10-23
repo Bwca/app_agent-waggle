@@ -313,6 +313,12 @@ const CLIPS = {
       await sleep(1500);
       await s.click(tid('perm-grant-btn'));
       await s.waitForReplies(2);
+      // Where that grant went, and how to take it back.
+      await s.click(tid('agent-menu-btn'));
+      await s.click(tid('agent-grants-btn'));
+      await s.moveTo(tid('grants-item'));
+      await sleep(2000);
+      await s.click(tid('grants-close'));
     },
   },
 
