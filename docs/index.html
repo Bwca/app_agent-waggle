@@ -315,7 +315,9 @@
       <div class="feature-card"><span class="icon">💰</span><div><h3 data-i18n="features.f16.title">Cost &amp; context budget</h3><p data-i18n="features.f16.desc">Each agent's panel shows a running cost total and its last turn's resumed-context size, so a session that's gotten expensive is visible before it's a problem — context is also auto-compacted by the CLI itself, with a note posted into the chat whenever that happens.</p></div></div>
       <div class="feature-card"><span class="icon">🔌</span><div><h3 data-i18n="features.f17.title">Agentwaggle as an MCP server</h3><p data-i18n-html="features.f17.desc">Let an external Claude Code or Claude Desktop instance drive Agentwaggle itself over <code>/mcp</code> — create chats and agents, send a message, and get the real reply back, through the exact same code path as the UI.</p></div></div>
       <div class="feature-card"><span class="icon">🎤</span><div><h3 data-i18n="features.f18.title">Voice dictation</h3><p data-i18n="features.f18.desc">Click the mic next to the composer and talk — your browser transcribes speech into the message box in real time, so you can review or edit it before sending.</p></div></div>
+      <div class="feature-card"><span class="icon">⏹️</span><div><h3 data-i18n="features.f19.title">Live progress, stop anytime</h3><p data-i18n="features.f19.desc">A strip above the composer shows every agent still working, what it's doing and for how long — click one to jump to its reply. Stop interrupts a reply at any point, and stays in reach however long the reply gets.</p></div></div>
       <div class="feature-card"><span class="icon">🔀</span><div><h3 data-i18n="features.f20.title">Other agent CLIs (experimental)</h3><p data-i18n="features.f20.desc">Agents run as Claude Code by default. Turn on multi-provider mode in Settings to also run them as opencode or Cursor, at your own risk; every message header names the CLI behind it, like "Clara (claude)".</p></div></div>
+      <div class="feature-card"><span class="icon">🗂️</span><div><h3 data-i18n="features.f21.title">Collapsible panels</h3><p data-i18n="features.f21.desc">Fold away the chat list, the agent panel or the bars above the messages to give the conversation the whole window — remembered per browser.</p></div></div>
     </div>
   </div>
 </section>
@@ -516,8 +518,12 @@ http://localhost:3001</pre>
       'features.f17.desc': "Let an external Claude Code or Claude Desktop instance drive Agentwaggle itself over <code>/mcp</code> — create chats and agents, send a message, and get the real reply back, through the exact same code path as the UI.",
       'features.f18.title': 'Voice dictation',
       'features.f18.desc': "Click the mic next to the composer and talk — your browser transcribes speech into the message box in real time, so you can review or edit it before sending.",
+      'features.f19.title': "Live progress, stop anytime",
+      'features.f19.desc': "A strip above the composer shows every agent still working, what it's doing and for how long — click one to jump to its reply. Stop interrupts a reply at any point, and stays in reach however long the reply gets.",
       'features.f20.title': "Other agent CLIs (experimental)",
       'features.f20.desc': "Agents run as Claude Code by default. Turn on multi-provider mode in Settings to also run them as opencode or Cursor, at your own risk; every message header names the CLI behind it, like \"Clara (claude)\".",
+      'features.f21.title': "Collapsible panels",
+      'features.f21.desc': "Fold away the chat list, the agent panel or the bars above the messages to give the conversation the whole window — remembered per browser.",
 
       'how.kicker': 'How it works',
       'how.h2': 'From an empty chat to a working team',
@@ -552,10 +558,6 @@ http://localhost:3001</pre>
       'usecases.mention-relay.desc': 'Two agents in one chat — the user @mentions one, who delegates to the other by @mentioning them back in its reply.',
       'usecases.permission-flow.label': 'Permission grant',
       'usecases.permission-flow.desc': "An agent's tool call gets denied, surfacing a permission card that says what Grant will save. Granting it lets the agent continue right away, and the agent's Saved permissions list then shows the grant, ready to revoke.",
-      'usecases.stop-agent.label': "Stop a long reply",
-      'usecases.stop-agent.desc': "An agent's reply runs well past the bottom of the screen. Its header, with the Stop button, stays pinned at the top of the chat, so one click interrupts it mid-turn.",
-      'usecases.stop-agent.label': "Stop a long reply",
-      'usecases.stop-agent.desc': "An agent's reply runs well past the bottom of the screen. Its header, with the Stop button, stays pinned at the top of the chat, so one click interrupts it mid-turn.",
       'usecases.stop-agent.label': "Stop a long reply",
       'usecases.stop-agent.desc': "An agent's reply runs well past the bottom of the screen. Its header, with the Stop button, stays pinned at the top of the chat, so one click interrupts it mid-turn.",
       'usecases.chat-rename.label': 'Rename a chat',
@@ -671,8 +673,12 @@ http://localhost:3001</pre>
       'features.f17.desc': "Laissez une instance externe de Claude Code ou Claude Desktop piloter Agentwaggle elle-même via <code>/mcp</code> — créer des discussions et des agents, envoyer un message et recevoir la vraie réponse, par exactement le même chemin de code que l'interface.",
       'features.f18.title': 'Dictée vocale',
       'features.f18.desc': "Cliquez sur le micro à côté du champ de saisie et parlez — votre navigateur transcrit la parole dans le message en temps réel, pour que vous puissiez le relire ou le modifier avant de l'envoyer.",
+      'features.f19.title': "Progression en direct, arrêt à tout moment",
+      'features.f19.desc': "Une bande au-dessus du champ de saisie montre chaque agent encore au travail, ce qu'il fait et depuis combien de temps — cliquez dessus pour aller à sa réponse. « Arrêter » interrompt une réponse à tout moment, et reste à portée de main quelle que soit sa longueur.",
       'features.f20.title': "Autres CLI d'agent (expérimental)",
       'features.f20.desc': "Les agents fonctionnent avec Claude Code par défaut. Activez le mode multi-fournisseur dans les Paramètres pour les faire aussi fonctionner avec opencode ou Cursor, à vos propres risques; l'en-tête de chaque message nomme la CLI derrière lui, comme « Clara (claude) ».",
+      'features.f21.title': "Panneaux repliables",
+      'features.f21.desc': "Repliez la liste des discussions, le panneau des agents ou les barres au-dessus des messages pour donner toute la fenêtre à la conversation — mémorisé par navigateur.",
 
       'how.kicker': 'Fonctionnement',
       'how.h2': "D'une discussion vide à une équipe fonctionnelle",
@@ -707,10 +713,6 @@ http://localhost:3001</pre>
       'usecases.mention-relay.desc': "Deux agents dans une même discussion — l'utilisateur en mentionne un avec @, qui délègue à l'autre en le mentionnant à son tour dans sa réponse.",
       'usecases.permission-flow.label': 'Octroi de permission',
       'usecases.permission-flow.desc': "L'appel d'outil d'un agent est refusé, ce qui affiche une carte de permission indiquant ce qu'« Accorder » enregistrera. L'accorder permet à l'agent de continuer immédiatement, et la liste des permissions enregistrées de l'agent affiche ensuite l'autorisation, prête à être révoquée.",
-      'usecases.stop-agent.label': "Arrêter une longue réponse",
-      'usecases.stop-agent.desc': "La réponse d'un agent dépasse largement le bas de l'écran. Son en-tête, avec le bouton « Arrêter », reste épinglé en haut de la discussion : un clic suffit pour l'interrompre en plein tour.",
-      'usecases.stop-agent.label': "Arrêter une longue réponse",
-      'usecases.stop-agent.desc': "La réponse d'un agent dépasse largement le bas de l'écran. Son en-tête, avec le bouton « Arrêter », reste épinglé en haut de la discussion : un clic suffit pour l'interrompre en plein tour.",
       'usecases.stop-agent.label': "Arrêter une longue réponse",
       'usecases.stop-agent.desc': "La réponse d'un agent dépasse largement le bas de l'écran. Son en-tête, avec le bouton « Arrêter », reste épinglé en haut de la discussion : un clic suffit pour l'interrompre en plein tour.",
       'usecases.chat-rename.label': 'Renommer une discussion',
@@ -802,7 +804,7 @@ http://localhost:3001</pre>
   // ── Demo player ─────────────────────────────────────────────────────
   const USE_CASE_SLUGS = [
     'create-agent-chat', 'mention-relay', 'permission-flow', 'chat-rename',
-    'stop-agent', 'stop-agent', 'stop-agent', 'free-relay', 'observer-agent', 'skill-invocation', 'message-search',
+    'stop-agent', 'free-relay', 'observer-agent', 'skill-invocation', 'message-search',
     'quick-messages', 'model-switch', 'chat-categories', 'agent-budget',
     'mcp-server', 'dictation',
   ];
