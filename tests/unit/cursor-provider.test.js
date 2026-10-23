@@ -298,7 +298,7 @@ describe('Cursor permission requests', () => {
 
   test('grants follow the provider\'s own pattern syntax, which the decision reads back', () => {
     const { patterns } = cursorProvider.grantFor('Shell', 'npm test | tail -5');
-    assert.deepEqual(patterns, ['Shell(npm test:*)', 'Shell(tail -5:*)']);
+    assert.deepEqual(patterns, ['Shell(npm test:*)', 'Shell(tail -5)']);
     const agent = { ...AGENT, allowedToolPatterns: patterns };
     assert.equal(decidePermission(agent, { tool_name: 'Shell', tool_input: { command: 'npm test | tail -5' } }), true);
     assert.equal(decidePermission(agent, { tool_name: 'Shell', tool_input: { command: 'npm publish' } }), false);

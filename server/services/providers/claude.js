@@ -7,7 +7,7 @@
  */
 
 import { basename, dirname } from 'path';
-import { commandPrefixes } from './shellCommands.js';
+import { commandGrants } from './shellCommands.js';
 import { ALLOWED_BUILTIN_COMMANDS } from '../commands.js';
 
 /** @typedef {import('./index.js').ToolCall} ToolCall */
@@ -515,6 +515,11 @@ export const FILE_PATH_TOOLS = ['Write', 'Edit', 'Read', 'NotebookEdit'];
  * tool (granting "git add" must never also authorize "git push --force") —
  * granting every sub-command of a chain the user explicitly saw and approved
  * is correct, since that's exactly what the permission card displayed.
+ * Where two tokens wouldn't say what runs ("python3 -c", "bash -c", "eval
+ * $(…)"), the sub-command is granted exactly, `Bash(<command>)`, which the
+ * CLI matches only verbatim, and a loop is granted by the commands inside
+ * it, which is how the CLI judges one (both checked against v2.1.308) — see
+ * commandGrants.
  *
  * For any other non-file tool (WebFetch, WebSearch, Task, ...), Claude Code's
  * permission patterns don't support this kind of sub-command scoping — the
@@ -526,8 +531,7 @@ export const FILE_PATH_TOOLS = ['Write', 'Edit', 'Read', 'NotebookEdit'];
  */
 export function deriveToolPatterns(toolName, value) {
   if (toolName !== 'Bash') return [toolName];
-  const patterns = commandPrefixes(value).map((prefix) => (prefix ? `Bash(${prefix}:*)` : 'Bash'));
-  return [...new Set(patterns)];
+  return commandGrants(value).map(({ text, exact }) => (exact ? `Bash(${text})` : `Bash(${text}:*)`));
 }
 
 /**

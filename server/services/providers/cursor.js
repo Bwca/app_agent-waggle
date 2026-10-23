@@ -38,7 +38,7 @@ import { existsSync } from 'fs';
 import { homedir } from 'os';
 import { basename, delimiter, dirname, join, relative, isAbsolute } from 'path';
 import { fileURLToPath } from 'url';
-import { commandPrefixes } from './shellCommands.js';
+import { commandGrants, commandParts } from './shellCommands.js';
 
 /** @typedef {import('./index.js').TurnAccumulator} TurnAccumulator */
 /** @typedef {import('./index.js').ProcessSignal} ProcessSignal */
@@ -366,8 +366,9 @@ function describeRequest(state, toolCall) {
  * Answers a permission request from the agent's stored grants, the way
  * Claude's spawn flags would: everything under YOLO mode; a file tool on a
  * path inside the working directory or a granted directory (Claude's
- * acceptEdits); a command whose every sub-command a granted pattern
- * covers; any other tool granted by name.
+ * acceptEdits); a command whose every part a granted pattern covers,
+ * exactly or as a prefix, the way the Claude CLI reads its Bash patterns;
+ * any other tool granted by name.
  * @param {import('../../store/db.js').Agent} agent
  * @param {PermissionDenial} call
  * @returns {boolean}
@@ -385,8 +386,9 @@ export function decidePermission(agent, call) {
       const match = pattern.match(/^(.+?)\((.+):\*\)$/);
       return match && match[1] === call.tool_name ? [match[2]] : [];
     });
-    const prefixes = commandPrefixes(command);
-    return prefixes.length > 0 && prefixes.every((prefix) => grantedPrefixes.some((grant) => prefix === grant || prefix.startsWith(`${grant} `)));
+    const parts = commandParts(command);
+    return parts.length > 0 && parts.every((part) => granted.has(`${call.tool_name}(${part})`)
+      || grantedPrefixes.some((grant) => part === grant || part.startsWith(`${grant} `)));
   }
   return false;
 }
@@ -401,7 +403,7 @@ export function decidePermission(agent, call) {
  * @returns {string[]}
  */
 function deriveToolPatterns(name, command) {
-  return commandPrefixes(command).map((prefix) => (prefix ? `${name}(${prefix}:*)` : name));
+  return commandGrants(command).map(({ text, exact }) => (exact ? `${name}(${text})` : `${name}(${text}:*)`));
 }
 
 /**

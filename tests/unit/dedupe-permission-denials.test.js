@@ -30,8 +30,8 @@ describe('dedupePermissionDenials', () => {
   });
 
   test('an unpiped command already covered by an earlier piped one is dropped', () => {
-    const piped = 'npx create-next-app@latest . --use-npm 2>&1 | tail -60';
-    const unpiped = 'npx create-next-app@latest . --use-npm';
+    const piped = 'npm run build 2>&1 | tail -60';
+    const unpiped = 'npm run build';
     const result = dedupePermissionDenials([denial('Bash', piped), denial('Bash', unpiped)]);
     assert.equal(result.length, 1, `expected the redundant unpiped row to be dropped, got: ${JSON.stringify(result)}`);
     assert.equal(result[0].tool_input.command, piped);

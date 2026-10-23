@@ -27,7 +27,7 @@
 import { existsSync } from 'fs';
 import { homedir } from 'os';
 import { basename, delimiter, dirname, join, relative, isAbsolute } from 'path';
-import { commandPrefixes } from './shellCommands.js';
+import { commandGrants } from './shellCommands.js';
 
 /** @typedef {import('./index.js').ToolCall} ToolCall */
 /** @typedef {import('./index.js').TurnAccumulator} TurnAccumulator */
@@ -317,7 +317,7 @@ export function decidePermission(agent, call) {
  * @returns {string[]}
  */
 function deriveToolPatterns(toolName, command) {
-  return commandPrefixes(command).map((prefix) => (prefix ? `${toolName}(${prefix}:*)` : toolName));
+  return commandGrants(command).map(({ text, exact }) => (exact ? `${toolName}(${text})` : `${toolName}(${text}:*)`));
 }
 
 /**

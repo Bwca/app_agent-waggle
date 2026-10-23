@@ -217,7 +217,7 @@ describe('opencode permission requests', () => {
 
   test('grants follow the provider\'s own pattern syntax, which the decision reads back', () => {
     const { patterns } = opencodeProvider.grantFor('bash', 'npm test | tail -5');
-    assert.deepEqual(patterns, ['bash(npm test:*)', 'bash(tail -5:*)']);
+    assert.deepEqual(patterns, ['bash(npm test:*)', 'bash(tail -5)']);
     const agent = { ...AGENT, allowedToolPatterns: patterns };
     assert.equal(decidePermission(agent, { tool_name: 'bash', tool_input: { command: 'npm test | tail -5' } }), true);
     assert.equal(decidePermission(agent, { tool_name: 'bash', tool_input: { command: 'npm publish' } }), false);
