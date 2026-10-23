@@ -303,7 +303,7 @@
       <div class="feature-card"><span class="icon">🧩</span><div><h3 data-i18n="features.f4.title">Real skills &amp; MCP</h3><p data-i18n-html="features.f4.desc">Invoke an agent's actual skills with <code>@Name /command</code> — read straight from its live process, autocomplete included.</p></div></div>
       <div class="feature-card"><span class="icon">🔍</span><div><h3 data-i18n="features.f5.title">Spotlight filter</h3><p data-i18n="features.f5.desc">Focus a busy chat on one agent's relevant messages only; a quiet blue dot flags replies you'd otherwise miss elsewhere.</p></div></div>
       <div class="feature-card"><span class="icon">🕶️</span><div><h3 data-i18n="features.f6.title">Observer agents</h3><p data-i18n="features.f6.desc">An agent that only speaks up when explicitly @mentioned, catching up on the full chat history instead of the recent window.</p></div></div>
-      <div class="feature-card"><span class="icon">🔐</span><div><h3 data-i18n="features.f7.title">Permission flow</h3><p data-i18n="features.f7.desc">Grant or deny file and command access per tool call, with scoped patterns — or skip checks entirely with per-agent YOLO mode.</p></div></div>
+      <div class="feature-card"><span class="icon">🔐</span><div><h3 data-i18n="features.f7.title">Permission flow</h3><p data-i18n="features.f7.desc">Grant or deny file and command access per tool call. Each card says exactly what Grant will save, and an agent's Saved permissions list lets you revoke any of it later — or skip checks entirely with per-agent YOLO mode.</p></div></div>
       <div class="feature-card"><span class="icon">🕐</span><div><h3 data-i18n="features.f8.title">Scheduled messages</h3><p data-i18n="features.f8.desc">Queue a message for later; an auto-continue toggle re-arms itself automatically after a session-limit reset.</p></div></div>
       <div class="feature-card"><span class="icon">📄</span><div><h3 data-i18n="features.f9.title">Paginated history</h3><p data-i18n="features.f9.desc">Long chats split into forum-style pages instead of one endless scroll, with full-text search across the whole history.</p></div></div>
       <div class="feature-card"><span class="icon">🌐</span><div><h3 data-i18n="features.f10.title">Browser access</h3><p data-i18n="features.f10.desc">Grant a Claude Code agent real control of your Chrome browser via the Claude in Chrome extension — any number of agents at once.</p></div></div>
@@ -492,7 +492,7 @@ http://localhost:3001</pre>
       'features.f6.title': 'Observer agents',
       'features.f6.desc': 'An agent that only speaks up when explicitly @mentioned, catching up on the full chat history instead of the recent window.',
       'features.f7.title': 'Permission flow',
-      'features.f7.desc': 'Grant or deny file and command access per tool call, with scoped patterns — or skip checks entirely with per-agent YOLO mode.',
+      'features.f7.desc': "Grant or deny file and command access per tool call. Each card says exactly what Grant will save, and an agent's Saved permissions list lets you revoke any of it later — or skip checks entirely with per-agent YOLO mode.",
       'features.f8.title': 'Scheduled messages',
       'features.f8.desc': 'Queue a message for later; an auto-continue toggle re-arms itself automatically after a session-limit reset.',
       'features.f9.title': 'Paginated history',
@@ -549,6 +549,8 @@ http://localhost:3001</pre>
       'usecases.mention-relay.desc': 'Two agents in one chat — the user @mentions one, who delegates to the other by @mentioning them back in its reply.',
       'usecases.permission-flow.label': 'Permission grant',
       'usecases.permission-flow.desc': "An agent's tool call gets denied, surfacing a permission card that says what Grant will save. Granting it lets the agent continue right away, and the agent's Saved permissions list then shows the grant, ready to revoke.",
+      'usecases.stop-agent.label': "Stop a long reply",
+      'usecases.stop-agent.desc': "An agent's reply runs well past the bottom of the screen. Its header, with the Stop button, stays pinned at the top of the chat, so one click interrupts it mid-turn.",
       'usecases.stop-agent.label': "Stop a long reply",
       'usecases.stop-agent.desc': "An agent's reply runs well past the bottom of the screen. Its header, with the Stop button, stays pinned at the top of the chat, so one click interrupts it mid-turn.",
       'usecases.chat-rename.label': 'Rename a chat',
@@ -641,7 +643,7 @@ http://localhost:3001</pre>
       'features.f6.title': 'Agents observateurs',
       'features.f6.desc': "Un agent qui ne prend la parole que lorsqu'il est explicitement mentionné avec @, en rattrapant tout l'historique de la discussion plutôt que la fenêtre récente.",
       'features.f7.title': 'Gestion des permissions',
-      'features.f7.desc': "Autorisez ou refusez l'accès aux fichiers et aux commandes pour chaque appel d'outil, avec des motifs ciblés — ou ignorez les vérifications avec le mode YOLO par agent.",
+      'features.f7.desc': "Autorisez ou refusez l'accès aux fichiers et aux commandes pour chaque appel d'outil. Chaque carte indique exactement ce qu'« Accorder » enregistrera, et la liste des permissions enregistrées d'un agent permet de tout révoquer plus tard — ou ignorez les vérifications avec le mode YOLO par agent.",
       'features.f8.title': 'Messages planifiés',
       'features.f8.desc': "Mettez un message en file d'attente pour plus tard; une option de continuation automatique se réarme d'elle-même après la réinitialisation d'une limite de session.",
       'features.f9.title': 'Historique paginé',
@@ -698,6 +700,8 @@ http://localhost:3001</pre>
       'usecases.mention-relay.desc': "Deux agents dans une même discussion — l'utilisateur en mentionne un avec @, qui délègue à l'autre en le mentionnant à son tour dans sa réponse.",
       'usecases.permission-flow.label': 'Octroi de permission',
       'usecases.permission-flow.desc': "L'appel d'outil d'un agent est refusé, ce qui affiche une carte de permission indiquant ce qu'« Accorder » enregistrera. L'accorder permet à l'agent de continuer immédiatement, et la liste des permissions enregistrées de l'agent affiche ensuite l'autorisation, prête à être révoquée.",
+      'usecases.stop-agent.label': "Arrêter une longue réponse",
+      'usecases.stop-agent.desc': "La réponse d'un agent dépasse largement le bas de l'écran. Son en-tête, avec le bouton « Arrêter », reste épinglé en haut de la discussion : un clic suffit pour l'interrompre en plein tour.",
       'usecases.stop-agent.label': "Arrêter une longue réponse",
       'usecases.stop-agent.desc': "La réponse d'un agent dépasse largement le bas de l'écran. Son en-tête, avec le bouton « Arrêter », reste épinglé en haut de la discussion : un clic suffit pour l'interrompre en plein tour.",
       'usecases.chat-rename.label': 'Renommer une discussion',
@@ -789,7 +793,7 @@ http://localhost:3001</pre>
   // ── Demo player ─────────────────────────────────────────────────────
   const USE_CASE_SLUGS = [
     'create-agent-chat', 'mention-relay', 'permission-flow', 'chat-rename',
-    'stop-agent', 'free-relay', 'observer-agent', 'skill-invocation', 'message-search',
+    'stop-agent', 'stop-agent', 'free-relay', 'observer-agent', 'skill-invocation', 'message-search',
     'quick-messages', 'model-switch', 'chat-categories', 'agent-budget',
     'mcp-server', 'dictation',
   ];
