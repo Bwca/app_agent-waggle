@@ -21,6 +21,30 @@ import { getProvider } from './providers/index.js';
 import { t } from '../i18n/t.js';
 
 /**
+ * The flattened value a permission card shows for a denial, and sends back
+ * as GRANT_PERMISSION's `value`: a file path, a command, else the input as
+ * JSON.
+ * @param {PermissionDenial} denial
+ * @returns {string}
+ */
+function denialValue(denial) {
+  return String(denial.tool_input?.file_path ?? denial.tool_input?.command ?? JSON.stringify(denial.tool_input));
+}
+
+/**
+ * Attaches to each denial what clicking Grant on it would save
+ * (AgentProvider.grantFor), so the permission card can say so before the
+ * click. Reported live: Grant on one `python3 -c` print had silently saved
+ * a rule covering every Python program, with nothing on the card to show it.
+ * @param {PermissionDenial[]} denials
+ * @param {import('./providers/index.js').AgentProvider} [provider]
+ * @returns {(PermissionDenial & { grant: import('./providers/index.js').PermissionGrant })[]}
+ */
+export function withGrantPreviews(denials, provider = getProvider()) {
+  return denials.map((denial) => ({ ...denial, grant: provider.grantFor(denial.tool_name, denialValue(denial)) }));
+}
+
+/**
  * Narrows a turn's raw permission_denials down to genuinely distinct asks.
  * The model can retry a blocked Bash action more than once in the same turn
  * with different literal text that still derives an OVERLAPPING or subset
@@ -54,7 +78,7 @@ export function dedupePermissionDenials(denials, provider = getProvider()) {
   const coveredPatterns = new Set();
 
   for (const denial of denials) {
-    const value = String(denial.tool_input?.file_path ?? denial.tool_input?.command ?? JSON.stringify(denial.tool_input));
+    const value = denialValue(denial);
     const exactKey = `${denial.tool_name}::${value}`;
     if (seenExact.has(exactKey)) continue;
 

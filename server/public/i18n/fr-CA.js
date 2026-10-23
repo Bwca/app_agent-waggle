@@ -196,6 +196,8 @@ export default {
   'perm.denyBtn': 'Refuser',
   'perm.deniedBtn': 'Refusé ✕',
   'perm.grantAllBtn': 'Tout accorder',
+  'perm.savesRules': "Accorder enregistre, jusqu'à révocation : {rules}",
+  'perm.savesFolder': "Accorder autorise, jusqu'à révocation, tous les fichiers de {path}",
 
   'msg.mentionTitle': 'Répondre à {name}',
   'msg.copyTextTitle': 'Copier le texte',

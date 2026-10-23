@@ -1949,9 +1949,30 @@ function buildPermissionCard(agentId, chatId, denials) {
     grantBtn.addEventListener('click', () => resolveRow(state, true));
     denyBtn.addEventListener('click', () => resolveRow(state, false));
     card.appendChild(row);
+    const saves = grantPreviewText(denial.grant);
+    if (saves) {
+      const savesLine = document.createElement('div');
+      savesLine.className = 'perm-saves';
+      savesLine.dataset.testid = 'perm-saves';
+      savesLine.textContent = saves;
+      card.appendChild(savesLine);
+    }
   });
 
   return card;
+}
+
+/**
+ * What Grant on a permission row will save, as the server previewed it
+ * (withGrantPreviews in agentRunner.js): a grant lasts until revoked, so
+ * the card says how far it reaches before the click, not after.
+ * @param {{ path?: string, patterns?: string[] } | undefined} grant
+ * @returns {string}
+ */
+function grantPreviewText(grant) {
+  if (grant?.path) return t('perm.savesFolder', { path: grant.path });
+  if (grant?.patterns?.length) return t('perm.savesRules', { rules: grant.patterns.join(', ') });
+  return '';
 }
 
 /**

@@ -196,6 +196,8 @@ export default {
   'perm.denyBtn': 'Deny',
   'perm.deniedBtn': 'Denied ✕',
   'perm.grantAllBtn': 'Grant all',
+  'perm.savesRules': "Grant saves, until revoked: {rules}",
+  'perm.savesFolder': "Grant allows, until revoked, every file in {path}",
 
   'msg.mentionTitle': 'Reply to {name}',
   'msg.copyTextTitle': 'Copy text',

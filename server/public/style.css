@@ -337,6 +337,7 @@ html[data-chat-header="collapsed"] #chat-header-expand-btn { display: block; }
 .perm-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
 .perm-tool { font-weight: 600; color: var(--red); min-width: 48px; flex-shrink: 0; }
 .perm-path { flex: 1; color: var(--muted); font-family: monospace; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.perm-saves { margin: -2px 0 4px; color: var(--dim); font-family: monospace; font-size: 11px; overflow-wrap: anywhere; }
 .perm-grant-btn { padding: 3px 10px; border-radius: 5px; border: 1px solid var(--red); background: transparent; color: var(--red); font-size: 12px; cursor: pointer; flex-shrink: 0; transition: background .15s, color .15s; }
 .perm-grant-btn:hover:not(:disabled) { background: var(--red); color: var(--bg0); }
 .perm-grant-btn:disabled { border-color: var(--green); color: var(--green); cursor: default; }

@@ -7,7 +7,7 @@ import { WebSocket, WebSocketServer } from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 import { getChat, getAgent, getAgentChatId, getMessages, getLastAgentTurn, addMessage, grantAgentPath, grantAgentToolPattern, setAgentResumeIdIfUnset, recordContextClear, setAgentModel, setAgentSeenUntil, setAgentUsage, setAgentSessionLimitReset, getUserDisplayName, createScheduledMessage, getScheduledMessages } from '../store/db.js';
 import { parseResponders, extractMentionedAgents, parseSkillInvocation } from '../services/messageRouter.js';
-import { runAgentStream, dedupePermissionDenials } from '../services/agentRunner.js';
+import { runAgentStream, dedupePermissionDenials, withGrantPreviews } from '../services/agentRunner.js';
 import { providerForAgent } from '../services/providers/index.js';
 import { killAgent, onBackgroundTurn, onBackgroundCompaction, onBackgroundError, onBackgroundUsage, onBackgroundStream, onBackgroundTasksChanged, getAllBackgroundTasks } from '../services/agentProcessManager.js';
 import { scheduleTimer } from '../services/scheduler.js';
@@ -231,7 +231,8 @@ function markRelayed(messageIds) {
  * @property {string} fullText
  * @property {import('../store/db.js').Message} message - The persisted message,
  *   including its toolCalls (see agentProcessManager.js's ToolCall typedef).
- * @property {import('../services/agentRunner.js').PermissionDenial[]} permissionDenials
+ * @property {import('../services/agentRunner.js').PermissionDenial[]} permissionDenials - Each
+ *   with `grant`, what Grant on it would save (see withGrantPreviews).
  * @property {boolean} stopped - True if the user interrupted this turn via
  *   STOP_AGENT rather than it finishing on its own.
  */
@@ -259,7 +260,8 @@ function markRelayed(messageIds) {
  * @property {string} chatId
  * @property {string} agentId
  * @property {import('../store/db.js').Message} message
- * @property {import('../services/agentRunner.js').PermissionDenial[]} permissionDenials
+ * @property {import('../services/agentRunner.js').PermissionDenial[]} permissionDenials - Each
+ *   with `grant`, what Grant on it would save (see withGrantPreviews).
  * @property {string | null} streamId - The live stream makeBackgroundStreamFactory
  *   opened for this turn while it ran, which this message replaces; null if
  *   none was opened.
@@ -1030,13 +1032,14 @@ function makeBackgroundTurnHandler(agentId, wss) {
     await addMessage(agentMessage);
     log.info({ agentId, chatId }, 'agent reported back on a background task unprompted');
 
+    const provider = providerForAgent(agent);
     /** @type {AgentBackgroundMessageEvent} */
     broadcast(wss, {
       type: 'AGENT_BACKGROUND_MESSAGE',
       chatId,
       agentId,
       message: agentMessage,
-      permissionDenials: dedupePermissionDenials(permissionDenials, providerForAgent(agent)),
+      permissionDenials: withGrantPreviews(dedupePermissionDenials(permissionDenials, provider), provider),
       streamId,
     });
   };
@@ -1666,7 +1669,7 @@ async function runAgentsParallel(agents, allMembers, chat, userMessage, wss, exc
         // derive an overlapping --allowedTools pattern, so granting one
         // already covers the other. Only the server knows CLI pattern
         // syntax well enough to reason about that.
-        permissionDenials: dedupedDenials,
+        permissionDenials: withGrantPreviews(dedupedDenials, providerForAgent(agent)),
         stopped,
       });
       await postCompactionNotes(chat, agent, compactions, wss);
