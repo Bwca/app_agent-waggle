@@ -552,6 +552,13 @@ function grantFor(toolName, value) {
 export const claudeProvider = {
   id: 'claude',
   displayName: 'Claude',
+  // Its own keys and settings (ANTHROPIC_API_KEY, CLAUDE_CODE_OAUTH_TOKEN,
+  // CLAUDE_CONFIG_DIR, ...) reach no other provider's agents, and it keeps
+  // the user's git and SSH credentials, as it always had (see agentEnv.js).
+  env: {
+    owns: (name) => name.startsWith('ANTHROPIC_') || name.startsWith('CLAUDE'),
+    userCredentials: true,
+  },
   spawnCommand: (agent, options) => ({ command: CLAUDE_BIN, args: buildArgs(agent, options) }),
   versionCommand: () => ({ command: CLAUDE_BIN, args: ['--version'], source: process.env.CLAUDE_BIN ? 'env' : 'path' }),
   startTurn: (state, content) => state.write(encodeTurn(content)),

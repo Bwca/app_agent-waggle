@@ -11,6 +11,8 @@
  * reply text (see "{turn}" below), and FAKE_CLAUDE_PROMPT_DIR records each turn's stdin line as
  * `<cwd basename>-<turn number>.json` there. FAKE_CLAUDE_ARGS_DIR records
  * this process's command-line arguments as `<cwd basename>-<pid>.json`.
+ * FAKE_CLAUDE_ENV_FILE records the names of the environment variables it
+ * was started with, as a JSON array.
  * SIGINT (a stop) ends a turn in progress the way CLI 2.1.301 does, with an
  * is_error result and exit code 0; FAKE_CLAUDE_SIGINT_EXIT_CODE makes it
  * exit with that code instead, without a result, like a CLI that just dies.
@@ -26,6 +28,10 @@ let turnNumber = 0;
 let pendingReply = null;
 if (process.env.FAKE_CLAUDE_ARGS_DIR) {
   writeFileSync(join(process.env.FAKE_CLAUDE_ARGS_DIR, `${basename(process.cwd())}-${process.pid}.json`), JSON.stringify(process.argv.slice(2)));
+}
+
+if (process.env.FAKE_CLAUDE_ENV_FILE) {
+  writeFileSync(process.env.FAKE_CLAUDE_ENV_FILE, JSON.stringify(Object.keys(process.env)));
 }
 
 const resumeArg = process.argv.find((arg) => arg.startsWith('--resume='));

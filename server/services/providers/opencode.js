@@ -592,6 +592,14 @@ function grantFor(toolName, value) {
 export const opencodeProvider = {
   id: 'opencode',
   displayName: 'opencode',
+  // Its own settings, and the model providers' API keys it can be set up
+  // with, reach no other provider's agents. An Anthropic key isn't among
+  // them: that one is Claude's, so opencode logs in with `opencode auth`.
+  // No git or SSH credentials (see agentEnv.js).
+  env: {
+    owns: (name) => /^(OPENCODE|OPENAI|AZURE_OPENAI|OPENROUTER|GEMINI|GOOGLE_GENERATIVE_AI|GROQ|MISTRAL|DEEPSEEK|XAI|TOGETHER|FIREWORKS|OLLAMA)_|^OPENCODE$/.test(name),
+    userCredentials: false,
+  },
   spawnCommand: (agent) => ({ command: resolveBin(agent.workingDir), args: ['acp'] }),
   versionCommand: (agent) => {
     const { command, source } = locateBin(agent?.workingDir);

@@ -24,6 +24,7 @@ import { existsSync } from 'fs';
 import { t } from '../i18n/t.js';
 import { logger } from '../logger.js';
 import { providerForAgent } from './providers/index.js';
+import { providerEnv } from './agentEnv.js';
 
 /** @typedef {import('./providers/index.js').ToolCall} ToolCall */
 /** @typedef {import('./providers/index.js').TurnUsage} TurnUsage */
@@ -516,7 +517,7 @@ function spawnProcess(agent) {
   const { command, args } = provider.spawnCommand(agent, { autocompactDefault });
   const child = spawn(command, args, {
     cwd: agent.workingDir,
-    env: { ...process.env },
+    env: providerEnv(provider),
     stdio: ['pipe', 'pipe', 'pipe'],
   });
   log.info({ agentId: agent.id, agentName: agent.name, pid: child.pid, resumed, provider: provider.id }, 'agent process spawned');

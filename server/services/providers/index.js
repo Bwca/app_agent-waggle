@@ -27,6 +27,8 @@ import { DEFAULT_PROVIDER_ID } from '../../public/agentProviders.js';
  * @typedef {Object} AgentProvider
  * @property {string} id - Stable key, stored per agent (see providerForAgent).
  * @property {string} displayName - Shown in user-facing errors.
+ * @property {ProviderEnv} env - What of the server's environment its binary
+ *   gets (see agentEnv.js's providerEnv).
  * @property {(agent: import('../../store/db.js').Agent, options?: { autocompactDefault?: string | null }) => { command: string, args: string[] }} spawnCommand -
  *   `autocompactDefault` is the compaction window from Settings (see
  *   setAutocompactDefault in agentProcessManager.js); a provider with no
@@ -75,6 +77,16 @@ import { DEFAULT_PROVIDER_ID } from '../../public/agentProviders.js';
  * @property {(toolName: string, value: string) => string[] | null} overlappingPatterns -
  *   The patterns a denial would grant, for a tool whose grants can cover one
  *   another's (see agentRunner.js's dedupePermissionDenials), or null.
+ */
+
+/**
+ * @typedef {Object} ProviderEnv
+ * @property {(name: string) => boolean} owns - Whether an environment
+ *   variable is this provider's own (its API keys, its settings), which no
+ *   other provider's agents get.
+ * @property {boolean} userCredentials - Whether its agents get the user's
+ *   git and SSH credentials (an SSH agent, a git askpass helper, GitHub
+ *   tokens).
  */
 
 /**

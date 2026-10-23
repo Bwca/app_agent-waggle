@@ -21,7 +21,12 @@ after(() => rmSync(dir, { recursive: true, force: true }));
 function fakeProvider(script) {
   const bin = join(dir, `bin-${Math.random().toString(36).slice(2)}`);
   writeFileSync(bin, `#!/bin/sh\n${script}\n`, { mode: 0o755 });
-  return { id: 'fake', displayName: 'fake', modelsCommand: () => ({ command: bin, args: ['models'] }) };
+  return {
+    id: 'fake',
+    displayName: 'fake',
+    env: { owns: () => false, userCredentials: false },
+    modelsCommand: () => ({ command: bin, args: ['models'] }),
+  };
 }
 
 describe('parseModelList', () => {

@@ -680,6 +680,12 @@ function grantFor(name, value) {
 export const cursorProvider = {
   id: 'cursor',
   displayName: 'Cursor',
+  // Its own settings and key (CURSOR_API_KEY) reach no other provider's
+  // agents. No git or SSH credentials (see agentEnv.js).
+  env: {
+    owns: (name) => name.startsWith('CURSOR_'),
+    userCredentials: false,
+  },
   spawnCommand: () => ({ command: locateBin().command, args: ['acp'] }),
   versionCommand: () => {
     const { command, source } = locateBin();

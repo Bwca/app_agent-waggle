@@ -18,6 +18,7 @@
 import { spawn } from 'child_process';
 import { runTurn } from './agentProcessManager.js';
 import { getProvider } from './providers/index.js';
+import { providerEnv } from './agentEnv.js';
 import { t } from '../i18n/t.js';
 
 /**
@@ -216,7 +217,7 @@ export function runAgentStream({ agent, content, onChunk, onStatus, signal }) {
 export async function verifyProviderAvailable(provider = getProvider(), agent = undefined) {
   const { command, args, source } = provider.versionCommand(agent);
   return new Promise((resolve) => {
-    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(command, args, { env: providerEnv(provider), stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
     child.stdout.setEncoding('utf-8');
@@ -257,6 +258,7 @@ export async function listProviderModels(provider, agent = undefined) {
   return new Promise((resolve) => {
     const child = spawn(command, args, {
       cwd: agent?.workingDir,
+      env: providerEnv(provider),
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout: LIST_MODELS_TIMEOUT_MS,
     });
