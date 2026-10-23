@@ -265,7 +265,7 @@
   <div class="wrap">
     <p class="section-kicker" data-i18n="why.kicker">Why Agentwaggle</p>
     <h2 data-i18n="why.h2">Not a sandbox. Not a demo. The real thing.</h2>
-    <p class="section-lede" data-i18n="why.lede">Every agent in an Agentwaggle chat is a genuine, unrestricted coding-agent CLI process (Claude Code, opencode or Cursor) — the same tool you'd run in a terminal, just given a seat in a group chat.</p>
+    <p class="section-lede" data-i18n="why.lede">Every agent in an Agentwaggle chat is a genuine, unrestricted coding-agent CLI process (Claude Code, or experimentally opencode or Cursor) — the same tool you'd run in a terminal, just given a seat in a group chat.</p>
     <div class="benefit-grid">
       <div class="benefit-card">
         <span class="icon">⚙️</span>
@@ -315,6 +315,7 @@
       <div class="feature-card"><span class="icon">💰</span><div><h3 data-i18n="features.f16.title">Cost &amp; context budget</h3><p data-i18n="features.f16.desc">Each agent's panel shows a running cost total and its last turn's resumed-context size, so a session that's gotten expensive is visible before it's a problem — context is also auto-compacted by the CLI itself, with a note posted into the chat whenever that happens.</p></div></div>
       <div class="feature-card"><span class="icon">🔌</span><div><h3 data-i18n="features.f17.title">Agentwaggle as an MCP server</h3><p data-i18n-html="features.f17.desc">Let an external Claude Code or Claude Desktop instance drive Agentwaggle itself over <code>/mcp</code> — create chats and agents, send a message, and get the real reply back, through the exact same code path as the UI.</p></div></div>
       <div class="feature-card"><span class="icon">🎤</span><div><h3 data-i18n="features.f18.title">Voice dictation</h3><p data-i18n="features.f18.desc">Click the mic next to the composer and talk — your browser transcribes speech into the message box in real time, so you can review or edit it before sending.</p></div></div>
+      <div class="feature-card"><span class="icon">🔀</span><div><h3 data-i18n="features.f20.title">Other agent CLIs (experimental)</h3><p data-i18n="features.f20.desc">Agents run as Claude Code by default. Turn on multi-provider mode in Settings to also run them as opencode or Cursor, at your own risk; every message header names the CLI behind it, like "Clara (claude)".</p></div></div>
     </div>
   </div>
 </section>
@@ -398,7 +399,7 @@
     <table class="req-table">
       <tr><th data-i18n="get.reqCol">Requirement</th><th data-i18n="get.detailsCol">Details</th></tr>
       <tr><td>Node.js</td><td data-i18n-html="get.reqNode">22.13+ (needed for <code>node:sqlite</code> without a flag — see <code>.nvmrc</code>)</td></tr>
-      <tr><td data-i18n="get.reqCliLabel">Agent CLI</td><td data-i18n-html="get.reqCli"><code>claude</code> (Claude Code), <code>opencode</code> or <code>cursor-agent</code> (Cursor), at least one: installed, authenticated, and on <code>PATH</code></td></tr>
+      <tr><td data-i18n="get.reqCliLabel">Agent CLI</td><td data-i18n-html="get.reqCli"><code>claude</code> (Claude Code): installed, authenticated, and on <code>PATH</code>. <code>opencode</code> or <code>cursor-agent</code> (Cursor) can run agents too once multi-provider mode is on in Settings — experimental, at your own risk</td></tr>
       <tr><td data-i18n="get.reqOsLabel">OS</td><td data-i18n="get.reqOs">Linux, macOS, or Windows — developed and tested on Linux</td></tr>
     </table>
 
@@ -466,7 +467,7 @@ http://localhost:3001</pre>
 
       'why.kicker': 'Why Agentwaggle',
       'why.h2': 'Not a sandbox. Not a demo. The real thing.',
-      'why.lede': "Every agent in an Agentwaggle chat is a genuine, unrestricted coding-agent CLI process (Claude Code, opencode or Cursor) — the same tool you'd run in a terminal, just given a seat in a group chat.",
+      'why.lede': "Every agent in an Agentwaggle chat is a genuine, unrestricted coding-agent CLI process (Claude Code, or experimentally opencode or Cursor) — the same tool you'd run in a terminal, just given a seat in a group chat.",
       'why.b1.title': 'Full tool access, per agent',
       'why.b1.desc': 'Each agent runs against its own working directory with its own real tools, skills, and MCP servers — nothing stripped down or simulated for the chat UI.',
       'why.b2.title': 'Agents that work together',
@@ -515,6 +516,8 @@ http://localhost:3001</pre>
       'features.f17.desc': "Let an external Claude Code or Claude Desktop instance drive Agentwaggle itself over <code>/mcp</code> — create chats and agents, send a message, and get the real reply back, through the exact same code path as the UI.",
       'features.f18.title': 'Voice dictation',
       'features.f18.desc': "Click the mic next to the composer and talk — your browser transcribes speech into the message box in real time, so you can review or edit it before sending.",
+      'features.f20.title': "Other agent CLIs (experimental)",
+      'features.f20.desc': "Agents run as Claude Code by default. Turn on multi-provider mode in Settings to also run them as opencode or Cursor, at your own risk; every message header names the CLI behind it, like \"Clara (claude)\".",
 
       'how.kicker': 'How it works',
       'how.h2': 'From an empty chat to a working team',
@@ -553,6 +556,8 @@ http://localhost:3001</pre>
       'usecases.stop-agent.desc': "An agent's reply runs well past the bottom of the screen. Its header, with the Stop button, stays pinned at the top of the chat, so one click interrupts it mid-turn.",
       'usecases.stop-agent.label': "Stop a long reply",
       'usecases.stop-agent.desc': "An agent's reply runs well past the bottom of the screen. Its header, with the Stop button, stays pinned at the top of the chat, so one click interrupts it mid-turn.",
+      'usecases.stop-agent.label': "Stop a long reply",
+      'usecases.stop-agent.desc': "An agent's reply runs well past the bottom of the screen. Its header, with the Stop button, stays pinned at the top of the chat, so one click interrupts it mid-turn.",
       'usecases.chat-rename.label': 'Rename a chat',
       'usecases.chat-rename.desc': 'Renaming a chat in place from the sidebar — click the pencil, edit, Enter to save.',
       'usecases.free-relay.label': 'Free relay',
@@ -582,7 +587,7 @@ http://localhost:3001</pre>
       'get.reqCol': 'Requirement', 'get.detailsCol': 'Details',
       'get.reqNode': '22.13+ (needed for <code>node:sqlite</code> without a flag — see <code>.nvmrc</code>)',
       'get.reqCliLabel': 'Agent CLI',
-      'get.reqCli': '<code>claude</code> (Claude Code), <code>opencode</code> or <code>cursor-agent</code> (Cursor), at least one: installed, authenticated, and on <code>PATH</code>',
+      'get.reqCli': "<code>claude</code> (Claude Code): installed, authenticated, and on <code>PATH</code>. <code>opencode</code> or <code>cursor-agent</code> (Cursor) can run agents too once multi-provider mode is on in Settings — experimental, at your own risk",
       'get.reqOsLabel': 'OS',
       'get.reqOs': 'Linux, macOS, or Windows — developed and tested on Linux',
       'get.comment1': '# clone, install, run',
@@ -617,7 +622,7 @@ http://localhost:3001</pre>
 
       'why.kicker': 'Pourquoi Agentwaggle',
       'why.h2': 'Pas un bac à sable. Pas une démo. La vraie chose.',
-      'why.lede': "Chaque agent d'une discussion Agentwaggle est un véritable processus CLI d'agent de code (Claude Code, opencode ou Cursor), sans restriction — le même outil que vous exécuteriez dans un terminal, à qui l'on a simplement donné une place dans une discussion de groupe.",
+      'why.lede': "Chaque agent d'une discussion Agentwaggle est un véritable processus CLI d'agent de code (Claude Code, ou à titre expérimental opencode ou Cursor), sans restriction — le même outil que vous exécuteriez dans un terminal, à qui l'on a simplement donné une place dans une discussion de groupe.",
       'why.b1.title': 'Accès complet aux outils, par agent',
       'why.b1.desc': "Chaque agent s'exécute dans son propre répertoire de travail avec ses propres outils, compétences et serveurs MCP réels — rien n'est simplifié ni simulé pour l'interface de discussion.",
       'why.b2.title': 'Des agents qui travaillent ensemble',
@@ -666,6 +671,8 @@ http://localhost:3001</pre>
       'features.f17.desc': "Laissez une instance externe de Claude Code ou Claude Desktop piloter Agentwaggle elle-même via <code>/mcp</code> — créer des discussions et des agents, envoyer un message et recevoir la vraie réponse, par exactement le même chemin de code que l'interface.",
       'features.f18.title': 'Dictée vocale',
       'features.f18.desc': "Cliquez sur le micro à côté du champ de saisie et parlez — votre navigateur transcrit la parole dans le message en temps réel, pour que vous puissiez le relire ou le modifier avant de l'envoyer.",
+      'features.f20.title': "Autres CLI d'agent (expérimental)",
+      'features.f20.desc': "Les agents fonctionnent avec Claude Code par défaut. Activez le mode multi-fournisseur dans les Paramètres pour les faire aussi fonctionner avec opencode ou Cursor, à vos propres risques; l'en-tête de chaque message nomme la CLI derrière lui, comme « Clara (claude) ».",
 
       'how.kicker': 'Fonctionnement',
       'how.h2': "D'une discussion vide à une équipe fonctionnelle",
@@ -704,6 +711,8 @@ http://localhost:3001</pre>
       'usecases.stop-agent.desc': "La réponse d'un agent dépasse largement le bas de l'écran. Son en-tête, avec le bouton « Arrêter », reste épinglé en haut de la discussion : un clic suffit pour l'interrompre en plein tour.",
       'usecases.stop-agent.label': "Arrêter une longue réponse",
       'usecases.stop-agent.desc': "La réponse d'un agent dépasse largement le bas de l'écran. Son en-tête, avec le bouton « Arrêter », reste épinglé en haut de la discussion : un clic suffit pour l'interrompre en plein tour.",
+      'usecases.stop-agent.label': "Arrêter une longue réponse",
+      'usecases.stop-agent.desc': "La réponse d'un agent dépasse largement le bas de l'écran. Son en-tête, avec le bouton « Arrêter », reste épinglé en haut de la discussion : un clic suffit pour l'interrompre en plein tour.",
       'usecases.chat-rename.label': 'Renommer une discussion',
       'usecases.chat-rename.desc': "Renommer une discussion directement depuis la barre latérale — cliquez sur le crayon, modifiez, puis Entrée pour enregistrer.",
       'usecases.free-relay.label': 'Relais libre',
@@ -733,7 +742,7 @@ http://localhost:3001</pre>
       'get.reqCol': 'Exigence', 'get.detailsCol': 'Détails',
       'get.reqNode': '22.13+ (requis pour <code>node:sqlite</code> sans indicateur — voir <code>.nvmrc</code>)',
       'get.reqCliLabel': "CLI d'agent",
-      'get.reqCli': '<code>claude</code> (Claude Code), <code>opencode</code> ou <code>cursor-agent</code> (Cursor), au moins une : installée, authentifiée et présente dans le <code>PATH</code>',
+      'get.reqCli': "<code>claude</code> (Claude Code) : installée, authentifiée et présente dans le <code>PATH</code>. <code>opencode</code> ou <code>cursor-agent</code> (Cursor) peuvent aussi faire fonctionner des agents une fois le mode multi-fournisseur activé dans les Paramètres — expérimental, à vos propres risques",
       'get.reqOsLabel': 'SE',
       'get.reqOs': 'Linux, macOS ou Windows — développé et testé sur Linux',
       'get.comment1': '# cloner, installer, lancer',
@@ -793,7 +802,7 @@ http://localhost:3001</pre>
   // ── Demo player ─────────────────────────────────────────────────────
   const USE_CASE_SLUGS = [
     'create-agent-chat', 'mention-relay', 'permission-flow', 'chat-rename',
-    'stop-agent', 'stop-agent', 'free-relay', 'observer-agent', 'skill-invocation', 'message-search',
+    'stop-agent', 'stop-agent', 'stop-agent', 'free-relay', 'observer-agent', 'skill-invocation', 'message-search',
     'quick-messages', 'model-switch', 'chat-categories', 'agent-budget',
     'mcp-server', 'dictation',
   ];
