@@ -279,6 +279,11 @@ describe('Messaging', () => {
       (els) => els.map((el) => el.textContent.trim())
     );
     assert.deepEqual(authors, ['Claudia', 'Clauditor'], `expected a real relay, got: ${authors}`);
+    const providers = await page.$$eval(
+      tid('message') + '[data-role="agent"] ' + tid('msg-author-provider-badge'),
+      (els) => els.map((el) => el.textContent.trim())
+    );
+    assert.deepEqual(providers, ['(claude)', '(claude)'], 'each reply names its provider after its author');
   });
 
   test('an @mention in an earlier, unrelated turn does not trigger a stale relay', async () => {

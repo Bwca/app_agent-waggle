@@ -249,7 +249,7 @@ html[data-chat-header="collapsed"] #chat-header-expand-btn { display: block; }
 .msg-mention-btn:hover { background: var(--bg2); color: var(--blue); }
 .msg-author-yolo-badge { font-size: 11px; cursor: help; flex-shrink: 0; }
 .msg-author-chrome-badge { font-size: 11px; cursor: help; flex-shrink: 0; }
-.msg-author-provider-badge { font-size: 11px; cursor: help; flex-shrink: 0; opacity: 0.8; }
+.msg-author-provider-badge { font-size: 11px; font-weight: 400; color: var(--dim); cursor: help; flex-shrink: 0; }
 .msg-author-dir { font-size: 11px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .msg-time { font-size: 11px; color: var(--dim); flex-shrink: 0; }
 .msg-content { font-size: 14px; color: var(--text); word-break: break-word; line-height: 1.55; }
@@ -445,7 +445,6 @@ html[data-chat-header="collapsed"] #chat-header-expand-btn { display: block; }
 .agent-yolo-badge { font-size: 11px; cursor: help; }
 .agent-observer-badge { font-size: 11px; cursor: help; }
 .agent-chrome-badge { font-size: 11px; cursor: help; }
-.agent-provider-badge { font-size: 11px; cursor: help; opacity: 0.8; }
 .agent-dir { font-size: 11px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .agent-model { font-size: 11px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: help; }
 .agent-note { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

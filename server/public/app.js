@@ -817,17 +817,26 @@ function isSessionLimited(agent) {
 }
 
 /**
- * The small badge naming which CLI an agent runs as. Shown only for an
- * agent that isn't on the default provider, so a Claude-only setup looks
- * exactly as it did before providers existed.
+ * "Runs as Claude Code", as an escaped title attribute value. Where space
+ * is tight (agent panel, add menu, @mention popup) an agent's provider is
+ * only this tooltip on its name.
+ * @param {Agent} agent
+ * @returns {string}
+ */
+function providerTitle(agent) {
+  return escHtml(t('agent.providerBadgeTitle', { provider: providerDisplayFor(agent.provider).label }));
+}
+
+/**
+ * The "(claude)" after an agent's name in a message header, naming which
+ * CLI it runs as, so agents of different providers aren't mixed up.
  * @param {Agent} agent
  * @param {string} className
- * @returns {string} HTML, or '' for a default-provider agent
+ * @returns {string} HTML
  */
 function renderProviderBadge(agent, className) {
-  if (!agent.provider || agent.provider === DEFAULT_PROVIDER_ID) return '';
   const display = providerDisplayFor(agent.provider);
-  return ` <span class="${className}" data-testid="${className}" title="${escHtml(t('agent.providerBadgeTitle', { provider: display.label }))}">${display.icon}</span>`;
+  return ` <span class="${className}" data-testid="${className}" title="${providerTitle(agent)}">(${escHtml(display.tag)})</span>`;
 }
 
 /**
@@ -2533,10 +2542,10 @@ function buildMessageEl(msg) {
     <div class="msg-body">
       <div class="msg-meta">
         <span class="msg-author" data-testid="msg-author">${escHtml(msg.authorName)}</span>
+        ${agent ? renderProviderBadge(agent, 'msg-author-provider-badge') : ''}
         ${msg.role === 'agent' ? `<button class="msg-mention-btn" data-testid="msg-mention-btn" title="${t('msg.mentionTitle', { name: escHtml(msg.authorName) })}">@</button>` : ''}
         ${agent?.dangerouslySkipPermissions ? `<span class="msg-author-yolo-badge" data-testid="msg-author-yolo-badge" title="${t('agent.yoloBadgeTitle')}">🔥</span>` : ''}
         ${agent?.chromeAccess ? `<span class="msg-author-chrome-badge" data-testid="msg-author-chrome-badge" title="${t('agent.chromeBadgeTitle')}">🌐</span>` : ''}
-        ${agent ? renderProviderBadge(agent, 'msg-author-provider-badge') : ''}
         ${agent ? `<span class="msg-author-dir" data-testid="msg-author-dir" title="${escHtml(agent.workingDir)}">${escHtml(shortDir(agent.workingDir))}</span>` : ''}
         <span class="msg-time" data-iso="${msg.createdAt}">${fmtTime(msg.createdAt)}</span>
         ${msg.role === 'agent' ? `
@@ -2978,9 +2987,9 @@ function createStreamingBubble(agentId, agentName, agentColor) {
     <div class="msg-body">
       <div class="msg-meta">
         <span class="msg-author">${escHtml(agentName)}</span>
+        ${agent ? renderProviderBadge(agent, 'msg-author-provider-badge') : ''}
         ${agent?.dangerouslySkipPermissions ? `<span class="msg-author-yolo-badge" data-testid="msg-author-yolo-badge" title="${t('agent.yoloBadgeTitle')}">🔥</span>` : ''}
         ${agent?.chromeAccess ? `<span class="msg-author-chrome-badge" data-testid="msg-author-chrome-badge" title="${t('agent.chromeBadgeTitle')}">🌐</span>` : ''}
-        ${agent ? renderProviderBadge(agent, 'msg-author-provider-badge') : ''}
         ${agent ? `<span class="msg-author-dir" data-testid="msg-author-dir" title="${escHtml(agent.workingDir)}">${escHtml(shortDir(agent.workingDir))}</span>` : ''}
         <span class="msg-typing" data-testid="msg-typing">
           <span class="msg-status-text" data-testid="msg-status-text">${t('chat.respondingLabel')}</span>
@@ -3376,7 +3385,7 @@ function renderAgentPanel() {
     li.innerHTML = `
       <div class="agent-avatar" style="background:${agentDisplayColor(agent.color)}">${agent.name[0].toUpperCase()}</div>
       <div class="agent-info">
-        <span class="agent-name" data-testid="agent-name">${escHtml(agent.name)}${hasUnseen ? ` <span class="agent-unseen-dot" data-testid="agent-unseen-dot" title="${t('agent.unseenOutsideFocusTitle', { name: agent.name })}"></span>` : ''}${agent.dangerouslySkipPermissions ? ` <span class="agent-yolo-badge" data-testid="agent-yolo-badge" title="${t('agent.yoloBadgeTitle')}">🔥</span>` : ''}${agent.isObserver ? ` <span class="agent-observer-badge" data-testid="agent-observer-badge" title="${t('agent.observerBadgeTitle')}">👁</span>` : ''}${agent.chromeAccess ? ` <span class="agent-chrome-badge" data-testid="agent-chrome-badge" title="${t('agent.chromeBadgeTitle')}">🌐</span>` : ''}${renderProviderBadge(agent, 'agent-provider-badge')}</span>
+        <span class="agent-name" data-testid="agent-name"><span title="${providerTitle(agent)}">${escHtml(agent.name)}</span>${hasUnseen ? ` <span class="agent-unseen-dot" data-testid="agent-unseen-dot" title="${t('agent.unseenOutsideFocusTitle', { name: agent.name })}"></span>` : ''}${agent.dangerouslySkipPermissions ? ` <span class="agent-yolo-badge" data-testid="agent-yolo-badge" title="${t('agent.yoloBadgeTitle')}">🔥</span>` : ''}${agent.isObserver ? ` <span class="agent-observer-badge" data-testid="agent-observer-badge" title="${t('agent.observerBadgeTitle')}">👁</span>` : ''}${agent.chromeAccess ? ` <span class="agent-chrome-badge" data-testid="agent-chrome-badge" title="${t('agent.chromeBadgeTitle')}">🌐</span>` : ''}</span>
         <span class="agent-streaming" data-testid="agent-streaming"><span class="typing-dots" aria-hidden="true"><i></i><i></i><i></i></span> ${t('chat.respondingLabel')}</span>
         <span class="agent-dir" title="${escHtml(agent.workingDir)}">${escHtml(shortDir(agent.workingDir))}</span>
         ${agent.model ? `<span class="agent-model" data-testid="agent-model" title="${t('agent.modelTitle', { model: escHtml(agent.model) })}">🧠 ${escHtml(display.formatModel(agent.model))}</span>` : ''}
@@ -3438,7 +3447,7 @@ function renderAgentPanel() {
     li.dataset.agentId = agent.id;
     li.innerHTML = `
       <span class="add-menu-avatar" style="background:${agentDisplayColor(agent.color)}">${agent.name[0]}</span>
-      <span class="add-menu-name">${escHtml(agent.name)}</span>
+      <span class="add-menu-name" title="${providerTitle(agent)}">${escHtml(agent.name)}</span>
       <button class="agent-del-btn" data-testid="agent-del-btn" title="${t('agent.deleteTitle')}">🗑</button>`;
     li.querySelector('.add-menu-name').addEventListener('click', () => addMember(agent.id));
     li.querySelector('.add-menu-avatar').addEventListener('click', () => addMember(agent.id));
@@ -4837,7 +4846,7 @@ async function updateComposerDropdown() {
       testId: 'mention-item',
       html: `<span class="mention-avatar" style="background:${agentDisplayColor(agent.color)}">${agent.name[0]}</span>` +
         `<span class="mention-item-main">` +
-        `<span class="mention-item-name">${escHtml(agent.name)}${agent.dangerouslySkipPermissions ? ` <span class="msg-author-yolo-badge" title="${t('agent.yoloBadgeTitle')}">🔥</span>` : ''}${agent.chromeAccess ? ` <span class="msg-author-chrome-badge" title="${t('agent.chromeBadgeTitle')}">🌐</span>` : ''}${renderProviderBadge(agent, 'msg-author-provider-badge')}</span>` +
+        `<span class="mention-item-name" title="${providerTitle(agent)}">${escHtml(agent.name)}${agent.dangerouslySkipPermissions ? ` <span class="msg-author-yolo-badge" title="${t('agent.yoloBadgeTitle')}">🔥</span>` : ''}${agent.chromeAccess ? ` <span class="msg-author-chrome-badge" title="${t('agent.chromeBadgeTitle')}">🌐</span>` : ''}</span>` +
         `<span class="mention-item-desc">${escHtml(shortDir(agent.workingDir))}</span>` +
         (agent.note ? `<span class="mention-item-note">📝 ${escHtml(agent.note)}</span>` : '') +
         `</span>`,

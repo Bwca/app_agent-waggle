@@ -104,7 +104,7 @@ describe('Agent providers', () => {
     assert.equal(await isShown(page, tid('agent-autocompact-input')), true);
   });
 
-  test('an opencode agent is stored as one and shown with its badge and its own menu', async () => {
+  test('an opencode agent is stored as one and shown with its provider and its own menu', async () => {
     await createAgent(page, { name: 'Opal', workingDir: agentDir('opal'), provider: 'opencode' });
     await page.waitForSelector(tid('agent-item'), { timeout: 5000 });
 
@@ -112,16 +112,18 @@ describe('Agent providers', () => {
     assert.equal(agents.length, 1);
     assert.equal(agents[0].provider, 'opencode');
 
-    assert.ok(await page.$(tid('agent-provider-badge')), 'opencode agent shows a provider badge');
+    // The panel is too narrow for "(opencode)", so it's a tooltip on the name.
+    assert.equal(await page.$eval(tid('agent-name'), (el) => el.textContent.trim()), 'Opal');
+    assert.equal(await page.$eval(`${tid('agent-name')} [title]`, (el) => el.title), 'Runs as opencode');
     // Compaction is Claude's, so its menu item isn't offered.
     assert.equal(await page.$(tid('agent-autocompact-btn')), null);
     assert.ok(await page.$(tid('agent-model-btn')));
   });
 
-  test('a Claude agent looks exactly as before: no provider badge', async () => {
+  test('a Claude agent is named with its provider too', async () => {
     await createAgent(page, { name: 'Clara', workingDir: agentDir('clara') });
     await page.waitForSelector(tid('agent-item'), { timeout: 5000 });
-    assert.equal(await page.$(tid('agent-provider-badge')), null);
+    assert.equal(await page.$eval(`${tid('agent-name')} [title]`, (el) => el.title), 'Runs as Claude Code');
     assert.ok(await page.$(tid('agent-autocompact-btn')));
   });
 

@@ -18,7 +18,9 @@ export const DEFAULT_PROVIDER_ID = 'claude';
  * @typedef {Object} ProviderDisplay
  * @property {string} id - The provider id, as stored on the agent.
  * @property {string} label - Human name, e.g. in the New Agent provider picker.
- * @property {string} icon - Short glyph for the agent's provider badge.
+ * @property {string} tag - Short name shown in brackets after the agent's
+ *   name, e.g. "Clara (claude)", so agents of different providers can't be
+ *   mistaken for one another.
  * @property {string[]} namePool - Default names for a new agent — a name
  *   hints at what the agent runs as (see nameGeneratorFor).
  * @property {string[] | null} modelAliases - Model-family shortcuts the
@@ -54,7 +56,7 @@ const PROVIDER_DISPLAYS = {
   claude: {
     id: 'claude',
     label: 'Claude Code',
-    icon: '✳',
+    tag: 'claude',
     namePool: [
       'Claire', 'Clara', 'Clarabelle', 'Clarence', 'Clarissa', 'Clark', 'Clarke',
       'Claude', 'Claudia', 'Claudette', 'Claudio', 'Claudius', 'Clay', 'Clayton',
@@ -72,7 +74,7 @@ const PROVIDER_DISPLAYS = {
   opencode: {
     id: 'opencode',
     label: 'opencode',
-    icon: '⌬',
+    tag: 'opencode',
     namePool: [
       'Opal', 'Ophelia', 'Odette', 'Odile', 'Olive', 'Olivia', 'Oona', 'Opie',
       'Otto', 'Octavia', 'Octavian', 'Odin', 'Opaline', 'Oppie', 'Owen',
@@ -89,7 +91,7 @@ const PROVIDER_DISPLAYS = {
   cursor: {
     id: 'cursor',
     label: 'Cursor',
-    icon: '↖',
+    tag: 'cursor',
     namePool: [
       'Curtis', 'Curt', 'Curie', 'Curran', 'Curzon', 'Curtiss', 'Curry', 'Curla',
       'Curtina', 'Curio', 'Curwen', 'Curley', 'Currie', 'Curtana', 'Cursa',
