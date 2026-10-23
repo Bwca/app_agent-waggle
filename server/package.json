@@ -1,6 +1,6 @@
 {
   "name": "agentwaggle-server",
-  "version": "1.2.60",
+  "version": "1.2.61",
   "description": "Multi-agent Claude chat server",
   "type": "module",
   "main": "index.js",
