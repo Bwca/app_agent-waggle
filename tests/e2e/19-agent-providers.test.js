@@ -318,3 +318,73 @@ describe('Picking an opencode model from its list', () => {
     }, { timeout: 5000 }, TEST_PORT);
   });
 });
+
+describe('Multi-provider mode', () => {
+  /** @type {import('puppeteer').Page} */
+  let page;
+
+  before(async () => {
+    await startServer({ OPENCODE_BIN: '/bin/true' });
+    await launchBrowser();
+  });
+
+  after(async () => {
+    await closeBrowser();
+    await stopServer();
+  });
+
+  beforeEach(async () => {
+    await resetData();
+    if (page) await closePage();
+    page = await openPage();
+    await createChat(page, 'Provider Chat');
+  });
+
+  test('is off by default: only Claude Code is offered, and the server refuses any other provider', async () => {
+    await page.click(tid('new-agent-btn'));
+    await page.waitForSelector(tid('agent-provider-select'));
+    const options = await page.$$eval(`${tid('agent-provider-select')} option`, (els) => els.map((el) => el.value));
+    assert.deepEqual(options, ['claude']);
+    assert.equal(await page.$eval('#agent-provider-label', (el) => el.hidden), true, 'the "Runs as" picker is hidden');
+
+    const res = await fetch(`http://localhost:${TEST_PORT}/api/agents`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Opal', color: '#89b4fa', workingDir: agentDir('opal'), provider: 'opencode' }),
+    });
+    assert.equal(res.status, 400);
+    assert.match((await res.json()).error, /multi-provider mode/i);
+  });
+
+  test('turning it on in Settings asks to accept the risk first, and declining leaves it off', async () => {
+    await page.click(tid('settings-btn'));
+    await page.waitForSelector(tid('settings-multi-provider-check'), { visible: true });
+    assert.match(await page.$eval(tid('settings-multi-provider-warning'), (el) => el.textContent), /own risk/i);
+    assert.equal(await page.$eval('#settings-default-provider-label', (el) => el.hidden), true);
+
+    await page.click(tid('settings-multi-provider-check'));
+    await page.waitForSelector(tid('confirm-overlay'), { visible: true });
+    assert.match(await page.$eval(tid('confirm-message'), (el) => el.textContent), /own risk/i);
+    await page.click(tid('confirm-cancel'));
+    assert.equal(await page.$eval(tid('settings-multi-provider-check'), (el) => el.checked), false);
+
+    await page.click(tid('settings-multi-provider-check'));
+    await page.waitForSelector(tid('confirm-overlay'), { visible: true });
+    await page.click(tid('confirm-ok'));
+    await page.waitForSelector('#settings-default-provider-label:not([hidden])');
+    await page.select(tid('settings-default-provider-select'), 'opencode');
+    await page.click(tid('settings-save'));
+    await page.waitForSelector(tid('settings-overlay'), { hidden: true });
+
+    const settings = await (await fetch(`http://localhost:${TEST_PORT}/api/settings`)).json();
+    assert.equal(settings.multiProvider, true);
+    assert.equal(settings.defaultProvider, 'opencode');
+
+    // The New Agent form now offers every provider, starting on the default one.
+    await page.click(tid('new-agent-btn'));
+    await page.waitForSelector('#agent-provider-label:not([hidden])');
+    const options = await page.$$eval(`${tid('agent-provider-select')} option`, (els) => els.map((el) => el.value));
+    assert.ok(options.includes('opencode') && options.includes('cursor'), `options: ${options}`);
+    assert.equal(await page.$eval(tid('agent-provider-select'), (el) => el.value), 'opencode');
+  });
+});

@@ -152,7 +152,7 @@
       </div>
       <form id="agent-form">
         <div id="agent-form-fields">
-        <label class="field-label field-span-2"><span data-i18n="agentModal.providerLabel">Runs as</span> <span class="field-hint" data-i18n="agentModal.providerHint">(the CLI behind this agent — fixed once created)</span>
+        <label id="agent-provider-label" class="field-label field-span-2"><span data-i18n="agentModal.providerLabel">Runs as</span> <span class="field-hint" data-i18n="agentModal.providerHint">(the CLI behind this agent — fixed once created)</span>
           <select id="agent-provider" data-testid="agent-provider-select"></select>
           <span id="agent-provider-status" class="field-hint" data-testid="agent-provider-status"></span>
         </label>
@@ -280,6 +280,16 @@
         </label>
         <label class="field-label"><span data-i18n="settingsModal.autocompactLabel">Default compaction window</span> <span class="field-hint" data-i18n="settingsModal.autocompactHint">(context size at which an agent's session gets summarized: "auto", or 100k–1M; an agent's own setting wins)</span>
           <input id="settings-autocompact" data-testid="settings-autocompact-input" list="autocompact-presets" autocomplete="off" />
+        </label>
+        <label id="settings-multi-provider-label" class="check-label check-label-danger">
+          <input id="settings-multi-provider" data-testid="settings-multi-provider-check" type="checkbox" />
+          <span>
+            <span data-i18n="settingsModal.multiProviderLabel">Multi-provider mode</span> <span class="field-hint" data-i18n="settingsModal.multiProviderHint">(let agents run as CLIs other than Claude Code: opencode, Cursor)</span>
+            <span class="field-hint" data-testid="settings-multi-provider-warning" data-i18n="settingsModal.multiProviderWarning">Use at your own risk. Agents running as other CLIs are experimental and come with no guarantees: of how they behave, of what they do in your projects, or of how they handle your data and credentials. Claude Code is the supported provider.</span>
+          </span>
+        </label>
+        <label id="settings-default-provider-label" class="field-label" hidden><span data-i18n="settingsModal.defaultProviderLabel">Default provider</span> <span class="field-hint" data-i18n="settingsModal.defaultProviderHint">(what a new agent runs as unless you pick another)</span>
+          <select id="settings-default-provider" data-testid="settings-default-provider-select"></select>
         </label>
         <p id="settings-error" data-testid="settings-error" class="error-text" hidden></p>
         <div id="settings-footer">

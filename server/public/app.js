@@ -248,10 +248,14 @@ let grantsAgentId = null;
  *   override of their own, '' when unset
  * @property {string} autocompactFallback - What applies when
  *   defaultAutocompact is unset (the server's APP_AUTOCOMPACT, or its built-in default)
+ * @property {boolean} multiProvider - Whether agents can run as CLIs other
+ *   than Claude Code, at the user's own risk
+ * @property {string} defaultProvider - What a new agent runs as unless
+ *   another is picked; only applies in multi-provider mode
  */
 
 /** @type {Settings} */
-let userSettings = { userDisplayName: 'You', userColor: '#a6adc8', locale: DEFAULT_LOCALE, theme: 'dark', defaultAutocompact: '', autocompactFallback: '200k' };
+let userSettings = { userDisplayName: 'You', userColor: '#a6adc8', locale: DEFAULT_LOCALE, theme: 'dark', defaultAutocompact: '', autocompactFallback: '200k', multiProvider: false, defaultProvider: DEFAULT_PROVIDER_ID };
 
 /**
  * The compaction window an agent with no override of its own runs with.
@@ -259,6 +263,26 @@ let userSettings = { userDisplayName: 'You', userColor: '#a6adc8', locale: DEFAU
  */
 function effectiveDefaultAutocompact() {
   return userSettings.defaultAutocompact || userSettings.autocompactFallback;
+}
+
+/**
+ * The providers a new agent can run as: only Claude Code unless
+ * multi-provider mode is on (the server refuses the others too, see
+ * providerPolicy.js).
+ * @returns {string[]}
+ */
+function offeredProviderIds() {
+  return userSettings.multiProvider ? PROVIDER_IDS : [DEFAULT_PROVIDER_ID];
+}
+
+/**
+ * What a new agent runs as unless another is picked.
+ * @returns {string}
+ */
+function defaultNewAgentProvider() {
+  return userSettings.multiProvider && PROVIDER_IDS.includes(userSettings.defaultProvider)
+    ? userSettings.defaultProvider
+    : DEFAULT_PROVIDER_ID;
 }
 
 /** @type {string} the UI's currently active language */
@@ -646,6 +670,7 @@ const agentDirInput    = $('#agent-dir');
 const agentDirBrowseBtn = $('#agent-dir-browse');
 const agentDirRecent   = $('#agent-dir-recent');
 const agentDirRecentWrap = $('#agent-dir-recent-wrap');
+const agentProviderLabel = $('#agent-provider-label');
 const agentProviderSelect = $('#agent-provider');
 const agentProviderStatus = $('#agent-provider-status');
 const agentResumeInput = $('#agent-resume');
@@ -709,6 +734,9 @@ const settingsColorGrid = $('#settings-color-grid');
 const settingsLanguageSelect = $('#settings-language');
 const settingsThemeSelect = $('#settings-theme');
 const settingsAutocompactInput = $('#settings-autocompact');
+const settingsMultiProviderCheck = $('#settings-multi-provider');
+const settingsDefaultProviderLabel = $('#settings-default-provider-label');
+const settingsDefaultProviderSelect = $('#settings-default-provider');
 const settingsError    = $('#settings-error');
 const settingsSave     = $('#settings-save');
 
@@ -4329,8 +4357,8 @@ function openModal() {
   agentDirInput.value = '';
   agentResumeInput.value = '';
   providerAvailability = new Map();
-  agentProviderSelect.value = DEFAULT_PROVIDER_ID;
-  renderProviderOptions();
+  agentProviderLabel.hidden = !userSettings.multiProvider;
+  renderProviderOptions(defaultNewAgentProvider());
   applyProviderToAgentForm();
   refreshProviderAvailability();
   agentAutocompactInput.value = '';
@@ -4386,20 +4414,23 @@ async function refreshProviderAvailability() {
 }
 
 /**
- * Renders the provider picker: every provider, with one the server couldn't
- * find disabled and marked as such. If that's the one picked, the picker
- * moves to the first one that can run, since Create would only fail.
+ * Renders the provider picker: every provider on offer (see
+ * offeredProviderIds), with one the server couldn't find disabled and
+ * marked as such. If that's the one picked, the picker moves to the first
+ * one that can run, since Create would only fail.
+ * @param {string} [pick] - The provider to pick, instead of keeping the current one.
  * @returns {void}
  */
-function renderProviderOptions() {
-  const picked = agentProviderSelect.value || DEFAULT_PROVIDER_ID;
-  agentProviderSelect.innerHTML = PROVIDER_IDS.map((id) => {
+function renderProviderOptions(pick = agentProviderSelect.value || defaultNewAgentProvider()) {
+  const offered = offeredProviderIds();
+  const picked = offered.includes(pick) ? pick : DEFAULT_PROVIDER_ID;
+  agentProviderSelect.innerHTML = offered.map((id) => {
     const { label } = providerDisplayFor(id);
     const missing = providerAvailability.get(id)?.available === false;
     return `<option value="${id}"${missing ? ' disabled' : ''}>${escHtml(missing ? t('agentModal.providerNotFoundOption', { provider: label }) : label)}</option>`;
   }).join('');
   const runnable = (id) => providerAvailability.get(id)?.available !== false;
-  const next = runnable(picked) ? picked : PROVIDER_IDS.find(runnable);
+  const next = runnable(picked) ? picked : offered.find(runnable);
   agentProviderSelect.value = next ?? picked;
   if (next && next !== picked) applyProviderToAgentForm();
   renderProviderStatus();
@@ -4422,7 +4453,7 @@ function renderProviderStatus() {
     }).replace(/\s+/g, ' '));
   }
   for (const result of providerAvailability.values()) {
-    if (!result.available) lines.push(t(`provider.${result.id}.notFound`));
+    if (!result.available && offeredProviderIds().includes(result.id)) lines.push(t(`provider.${result.id}.notFound`));
   }
   agentProviderStatus.textContent = lines.join(' ');
   modalSubmit.disabled = picked?.available === false;
@@ -4570,6 +4601,7 @@ async function openSettingsModal() {
     settingsThemeSelect.value = settings.theme;
     settingsAutocompactInput.value = settings.defaultAutocompact;
     settingsAutocompactInput.placeholder = t('settingsModal.autocompactPlaceholder', { value: settings.autocompactFallback });
+    renderSettingsProviders(settings);
   } catch {
     settingsDisplayNameInput.value = '';
     selectedUserColor = userSettings.userColor;
@@ -4577,6 +4609,7 @@ async function openSettingsModal() {
     settingsThemeSelect.value = userSettings.theme ?? 'dark';
     settingsAutocompactInput.value = userSettings.defaultAutocompact ?? '';
     settingsAutocompactInput.placeholder = t('settingsModal.autocompactPlaceholder', { value: userSettings.autocompactFallback });
+    renderSettingsProviders(userSettings);
   }
   renderColorGrid(settingsColorGrid, selectedUserColor, (c) => { selectedUserColor = c; });
   settingsOverlay.hidden = false;
@@ -4585,6 +4618,33 @@ async function openSettingsModal() {
 
 function closeSettingsModal() {
   settingsOverlay.hidden = true;
+}
+
+/**
+ * Fills the Settings form's multi-provider switch and default-provider
+ * picker; the picker only shows while the switch is on.
+ * @param {Settings} settings
+ */
+function renderSettingsProviders(settings) {
+  settingsMultiProviderCheck.checked = !!settings.multiProvider;
+  settingsDefaultProviderSelect.innerHTML = PROVIDER_IDS
+    .map((id) => `<option value="${id}">${escHtml(providerDisplayFor(id).label)}</option>`)
+    .join('');
+  settingsDefaultProviderSelect.value = PROVIDER_IDS.includes(settings.defaultProvider) ? settings.defaultProvider : DEFAULT_PROVIDER_ID;
+  settingsDefaultProviderLabel.hidden = !settingsMultiProviderCheck.checked;
+}
+
+/**
+ * Turning multi-provider mode on asks the user to accept the risk first;
+ * declining leaves it off.
+ * @returns {Promise<void>}
+ */
+async function handleMultiProviderToggle() {
+  if (settingsMultiProviderCheck.checked) {
+    const { confirmed } = await confirmDialog(t('confirm.enableMultiProvider'), { okLabel: t('confirm.enableMultiProviderBtn') });
+    if (!confirmed) settingsMultiProviderCheck.checked = false;
+  }
+  settingsDefaultProviderLabel.hidden = !settingsMultiProviderCheck.checked;
 }
 
 /**
@@ -4599,6 +4659,8 @@ async function handleSettingsFormSubmit(e) {
   const locale = settingsLanguageSelect.value;
   const theme = settingsThemeSelect.value;
   const defaultAutocompact = settingsAutocompactInput.value.trim();
+  const multiProvider = settingsMultiProviderCheck.checked;
+  const defaultProvider = settingsDefaultProviderSelect.value || DEFAULT_PROVIDER_ID;
 
   settingsSave.disabled = true;
   settingsError.hidden = true;
@@ -4606,7 +4668,7 @@ async function handleSettingsFormSubmit(e) {
     const res = await fetch('/api/settings', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userDisplayName, userColor, locale, theme, defaultAutocompact }),
+      body: JSON.stringify({ userDisplayName, userColor, locale, theme, defaultAutocompact, multiProvider, defaultProvider }),
     });
     if (!res.ok) {
       const body = await res.json();
@@ -5379,6 +5441,7 @@ settingsClose.addEventListener('click', closeSettingsModal);
 settingsCancel.addEventListener('click', closeSettingsModal);
 settingsOverlay.addEventListener('click', (e) => { if (e.target === settingsOverlay) closeSettingsModal(); });
 settingsForm.addEventListener('submit', handleSettingsFormSubmit);
+settingsMultiProviderCheck.addEventListener('change', handleMultiProviderToggle);
 
 chatHeaderCollapseBtn.addEventListener('click', () => setCollapsed('chatHeader', true));
 chatHeaderExpandBtn.addEventListener('click', () => setCollapsed('chatHeader', false));
