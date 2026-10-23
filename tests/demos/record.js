@@ -322,6 +322,33 @@ const CLIPS = {
     },
   },
 
+  'stop-agent': {
+    async run(s) {
+      // A reply grows a text block at a time, between tool calls, so the
+      // reading gives it somewhere to pause and keep growing.
+      const nora = await createAgent('Nora', { files: { 'notes.txt': 'Keep going.\n' } });
+      const chat = await createChat('Stop Demo', [nora]);
+      await s.open(`/?chat=${chat.id}`);
+      await s.startRecording();
+      await s.send('Do this 10 times: write 12 new numbered fun facts about octopuses, one short line each, then use the Read tool on notes.txt. No intro.');
+      // Until the reply runs well past the bottom of the view, so its top,
+      // where Stop sits, has scrolled away.
+      await s.page.waitForFunction(
+        () => (document.querySelector('[data-testid="streaming-bubble"]')?.offsetHeight ?? 0) > 1200,
+        { timeout: TURN_TIMEOUT_MS, polling: 200 },
+      );
+      await sleep(1500);
+      await s.click(tid('stream-stop-btn'));
+      await s.page.waitForSelector(tid('msg-stopped-badge'), { timeout: 30_000 });
+      await sleep(1000);
+      // A finished reply's header no longer sticks, so scroll back up to it.
+      await s.page.$eval(tid('msg-stopped-badge'), (el) => el.scrollIntoView({ block: 'center', behavior: 'smooth' }));
+      await sleep(1200);
+      await s.moveTo(tid('msg-stopped-badge'));
+      await sleep(1000);
+    },
+  },
+
   'chat-rename': {
     async run(s) {
       await createChat('Release Planning');

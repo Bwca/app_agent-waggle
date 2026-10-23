@@ -549,6 +549,8 @@ http://localhost:3001</pre>
       'usecases.mention-relay.desc': 'Two agents in one chat — the user @mentions one, who delegates to the other by @mentioning them back in its reply.',
       'usecases.permission-flow.label': 'Permission grant',
       'usecases.permission-flow.desc': "An agent's tool call gets denied, surfacing a permission card that says what Grant will save. Granting it lets the agent continue right away, and the agent's Saved permissions list then shows the grant, ready to revoke.",
+      'usecases.stop-agent.label': "Stop a long reply",
+      'usecases.stop-agent.desc': "An agent's reply runs well past the bottom of the screen. Its header, with the Stop button, stays pinned at the top of the chat, so one click interrupts it mid-turn.",
       'usecases.chat-rename.label': 'Rename a chat',
       'usecases.chat-rename.desc': 'Renaming a chat in place from the sidebar — click the pencil, edit, Enter to save.',
       'usecases.free-relay.label': 'Free relay',
@@ -696,6 +698,8 @@ http://localhost:3001</pre>
       'usecases.mention-relay.desc': "Deux agents dans une même discussion — l'utilisateur en mentionne un avec @, qui délègue à l'autre en le mentionnant à son tour dans sa réponse.",
       'usecases.permission-flow.label': 'Octroi de permission',
       'usecases.permission-flow.desc': "L'appel d'outil d'un agent est refusé, ce qui affiche une carte de permission indiquant ce qu'« Accorder » enregistrera. L'accorder permet à l'agent de continuer immédiatement, et la liste des permissions enregistrées de l'agent affiche ensuite l'autorisation, prête à être révoquée.",
+      'usecases.stop-agent.label': "Arrêter une longue réponse",
+      'usecases.stop-agent.desc': "La réponse d'un agent dépasse largement le bas de l'écran. Son en-tête, avec le bouton « Arrêter », reste épinglé en haut de la discussion : un clic suffit pour l'interrompre en plein tour.",
       'usecases.chat-rename.label': 'Renommer une discussion',
       'usecases.chat-rename.desc': "Renommer une discussion directement depuis la barre latérale — cliquez sur le crayon, modifiez, puis Entrée pour enregistrer.",
       'usecases.free-relay.label': 'Relais libre',
@@ -785,7 +789,7 @@ http://localhost:3001</pre>
   // ── Demo player ─────────────────────────────────────────────────────
   const USE_CASE_SLUGS = [
     'create-agent-chat', 'mention-relay', 'permission-flow', 'chat-rename',
-    'free-relay', 'observer-agent', 'skill-invocation', 'message-search',
+    'stop-agent', 'free-relay', 'observer-agent', 'skill-invocation', 'message-search',
     'quick-messages', 'model-switch', 'chat-categories', 'agent-budget',
     'mcp-server', 'dictation',
   ];
