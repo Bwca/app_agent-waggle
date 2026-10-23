@@ -4,7 +4,8 @@
  */
 
 import { Router } from 'express';
-import { getUserDisplayName, setUserDisplayName, getUserColor, setUserColor, getUserLocale, setUserLocale, getUserTheme, setUserTheme, getDefaultAutocompact, setDefaultAutocompact, getAgents } from '../store/db.js';
+import { getUserDisplayName, setUserDisplayName, getUserColor, setUserColor, getUserLocale, setUserLocale, getUserTheme, setUserTheme, getDefaultAutocompact, setDefaultAutocompact, getMultiProvider, setMultiProvider, getDefaultProvider, setDefaultProvider, getAgents } from '../store/db.js';
+import { hasProvider } from '../services/providers/index.js';
 import { killAgent, setAutocompactDefault } from '../services/agentProcessManager.js';
 import { AUTOCOMPACT_WINDOW } from '../services/providers/claude.js';
 import { normalizeAutocompact } from '../public/autocompact.js';
@@ -21,6 +22,8 @@ const router = Router();
  * Current settings, as both GET and PUT return them. `defaultAutocompact`
  * is '' when unset, and `autocompactFallback` is what applies then (the
  * APP_AUTOCOMPACT env var, or the built-in default), so the UI can show it.
+ * `defaultProvider` is the one chosen in Settings, which only applies while
+ * `multiProvider` is on (see providerPolicy.js).
  * @returns {object}
  */
 function currentSettings() {
@@ -31,6 +34,8 @@ function currentSettings() {
     theme: getUserTheme(),
     defaultAutocompact: getDefaultAutocompact() ?? '',
     autocompactFallback: AUTOCOMPACT_WINDOW,
+    multiProvider: getMultiProvider(),
+    defaultProvider: getDefaultProvider(),
   };
 }
 
@@ -53,6 +58,10 @@ router.get('/', (_req, res) => {
  * @param {string} [req.body.defaultAutocompact] - Context-compaction window
  *   for agents with no override of their own (see normalizeAutocompact for
  *   the accepted values); '' clears it back to autocompactFallback.
+ * @param {boolean} [req.body.multiProvider] - Whether agents can run as
+ *   CLIs other than Claude Code, at the user's own risk.
+ * @param {string} [req.body.defaultProvider] - The provider a new agent runs
+ *   as when none is picked, in multi-provider mode.
  */
 router.put('/', async (req, res) => {
   const userDisplayName = typeof req.body.userDisplayName === 'string' ? req.body.userDisplayName.trim() : '';
@@ -81,7 +90,17 @@ router.put('/', async (req, res) => {
     return res.status(400).json({ error: t('errors.invalidAutocompact') });
   }
 
+  const { multiProvider, defaultProvider } = req.body;
+  if (multiProvider !== undefined && typeof multiProvider !== 'boolean') {
+    return res.status(400).json({ error: t('errors.invalidMultiProvider') });
+  }
+  if (defaultProvider !== undefined && !hasProvider(defaultProvider)) {
+    return res.status(400).json({ error: t('errors.unknownProvider', { provider: defaultProvider }) });
+  }
+
   await setUserDisplayName(userDisplayName);
+  if (multiProvider !== undefined) await setMultiProvider(multiProvider);
+  if (defaultProvider !== undefined) await setDefaultProvider(defaultProvider);
   if (userColor !== undefined) await setUserColor(userColor);
   if (locale !== undefined) await setUserLocale(locale);
   if (theme !== undefined) await setUserTheme(theme);

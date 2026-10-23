@@ -11,7 +11,8 @@ import { existsSync } from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import { getAgents, getAgent, getAgentChatId, getChat, createAgent, updateAgent, deleteAgent, revokeAgentGrant } from '../store/db.js';
 import { verifyProviderAvailable } from '../services/agentRunner.js';
-import { DEFAULT_PROVIDER_ID, getProvider, hasProvider, providerForAgent } from '../services/providers/index.js';
+import { getProvider, providerForAgent } from '../services/providers/index.js';
+import { newAgentProvider } from '../services/providerPolicy.js';
 import { killAgent, getAgentSkills, spawnForAgent } from '../services/agentProcessManager.js';
 import { listAgentCommands, mergeSkills } from '../services/commands.js';
 import { broadcast, postAgentRemovedNote } from '../ws/handler.js';
@@ -59,7 +60,8 @@ export default function createAgentsRouter(wss) {
    * @param {string} req.body.color - Hex color e.g. "#6B8EAD"
    * @param {string} req.body.workingDir - Absolute path to project directory
    * @param {string} [req.body.provider] - Which CLI the agent runs as (see
-   *   services/providers/index.js); the default provider when unset.
+   *   services/providers/index.js); the default provider when unset. Only
+   *   Claude Code unless multi-provider mode is on (see providerPolicy.js).
    *   Creation-time only.
    * @param {string} [req.body.resumeId] - Optional --resume session ID for that CLI
    * @param {boolean} [req.body.dangerouslySkipPermissions] - "YOLO mode", opt-in
@@ -79,14 +81,13 @@ export default function createAgentsRouter(wss) {
    *   default applies when unset.
    */
   router.post('/', async (req, res) => {
-    const { name, color, workingDir, provider: providerId = DEFAULT_PROVIDER_ID, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess, note, modelOverride, autocompactOverride } = req.body;
+    const { name, color, workingDir, provider: requestedProvider, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess, note, modelOverride, autocompactOverride } = req.body;
     if (!name || !color || !workingDir) {
       return res.status(400).json({ error: t('errors.agentFieldsRequired') });
     }
-    if (!hasProvider(providerId)) {
-      return res.status(400).json({ error: t('errors.unknownProvider', { provider: providerId }) });
-    }
-    const provider = getProvider(providerId);
+    const allowed = newAgentProvider(requestedProvider);
+    if ('error' in allowed) return res.status(400).json({ error: allowed.error });
+    const provider = getProvider(allowed.providerId);
     const normalizedAutocompact = autocompactOverride ? normalizeAutocompact(autocompactOverride) : undefined;
     if (normalizedAutocompact === null) {
       return res.status(400).json({ error: t('errors.invalidAutocompact') });

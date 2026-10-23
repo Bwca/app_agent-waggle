@@ -38,7 +38,8 @@ import {
 } from '../store/db.js';
 import { verifyProviderAvailable } from '../services/agentRunner.js';
 import { normalizeAutocompact } from '../public/autocompact.js';
-import { DEFAULT_PROVIDER_ID, getProvider, hasProvider, providerForAgent } from '../services/providers/index.js';
+import { DEFAULT_PROVIDER_ID, getProvider, providerForAgent } from '../services/providers/index.js';
+import { newAgentProvider } from '../services/providerPolicy.js';
 import { spawnForAgent, killAgent } from '../services/agentProcessManager.js';
 import { handleUserMessage, broadcast, postAgentRemovedNote, postAgentAddedNote } from '../ws/handler.js';
 import { t } from '../i18n/t.js';
@@ -308,7 +309,7 @@ export function registerTools(mcpServer, wss) {
         name: z.string().min(1),
         color: z.string().min(1).describe('Hex color, e.g. "#6B8EAD"'),
         workingDir: z.string().min(1).describe('Absolute path to an existing project directory'),
-        provider: z.string().optional().describe(`Which CLI the agent runs as, e.g. "claude", "opencode" or "cursor" (default "${DEFAULT_PROVIDER_ID}"). Creation-time only.`),
+        provider: z.string().optional().describe(`Which CLI the agent runs as, e.g. "claude", "opencode" or "cursor". Creation-time only. Anything but "${DEFAULT_PROVIDER_ID}" needs multi-provider mode turned on in Settings; unset, the default provider chosen there.`),
         resumeId: z.string().optional().describe("Existing session id to resume, in the provider's own CLI"),
         dangerouslySkipPermissions: z.boolean().optional().describe('YOLO mode'),
         isObserver: z.boolean().optional(),
@@ -318,9 +319,10 @@ export function registerTools(mcpServer, wss) {
         autocompactOverride: z.string().optional().describe('Context-compaction window: "auto", or 100k–1M tokens (e.g. "200k", "1M"). The Settings default applies when unset.'),
       },
     },
-    async ({ name, color, workingDir, provider: providerId = DEFAULT_PROVIDER_ID, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess, note, modelOverride, autocompactOverride }) => {
-      if (!hasProvider(providerId)) return fail(t('errors.unknownProvider', { provider: providerId }));
-      const provider = getProvider(providerId);
+    async ({ name, color, workingDir, provider: requestedProvider, resumeId, dangerouslySkipPermissions, isObserver, chromeAccess, note, modelOverride, autocompactOverride }) => {
+      const allowed = newAgentProvider(requestedProvider);
+      if ('error' in allowed) return fail(allowed.error);
+      const provider = getProvider(allowed.providerId);
       const normalizedAutocompact = autocompactOverride ? normalizeAutocompact(autocompactOverride) : undefined;
       if (normalizedAutocompact === null) return fail(t('errors.invalidAutocompact'));
       if (!existsSync(workingDir)) return fail(t('errors.agentDirNotFound', { path: workingDir }));

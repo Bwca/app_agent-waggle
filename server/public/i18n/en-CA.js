@@ -258,6 +258,8 @@ export default {
   'errors.agentFieldsRequired': 'name, color, and workingDir are required',
   'errors.agentDirNotFound': "Working directory doesn't exist: {path}",
   'errors.agentVerifyFailed': "Couldn't verify {provider} can run for this agent: {message}",
+  'errors.multiProviderOff': "Only Claude Code agents can be created: turn on multi-provider mode in Settings to create one running as {provider}",
+  'errors.invalidMultiProvider': "multiProvider must be true or false",
   'errors.unknownProvider': 'Unknown agent provider: {provider}',
   'errors.agentAlreadyInChat': '{name} is already in # {chatName} — remove them from that chat first.',
   'errors.agentNotInChat': '{name} is not a member of this chat',

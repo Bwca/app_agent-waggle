@@ -258,6 +258,8 @@ export default {
   'errors.agentFieldsRequired': 'le nom, la couleur et le répertoire de travail sont requis',
   'errors.agentDirNotFound': "Le répertoire de travail n'existe pas : {path}",
   'errors.agentVerifyFailed': "Impossible de vérifier que {provider} peut fonctionner pour cet agent : {message}",
+  'errors.multiProviderOff': "Seuls des agents Claude Code peuvent être créés : activez le mode multi-fournisseur dans les Paramètres pour en créer un qui fonctionne avec {provider}",
+  'errors.invalidMultiProvider': "multiProvider doit valoir true ou false",
   'errors.unknownProvider': 'Fournisseur d’agent inconnu : {provider}',
   'errors.agentAlreadyInChat': "{name} fait déjà partie de # {chatName} — retirez d'abord cet agent de cette discussion.",
   'errors.agentNotInChat': "{name} ne fait pas partie de cette discussion",

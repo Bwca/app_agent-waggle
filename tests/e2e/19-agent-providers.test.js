@@ -47,6 +47,21 @@ function isShown(page, selector) {
   return page.$eval(selector, (el) => !el.closest('[hidden]'));
 }
 
+/**
+ * Turns multi-provider mode on or off, as Settings does: every provider but
+ * Claude Code is behind it.
+ * @param {boolean} enabled
+ * @param {string} [defaultProvider]
+ */
+async function setMultiProvider(enabled, defaultProvider = 'claude') {
+  const res = await fetch(`http://localhost:${TEST_PORT}/api/settings`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userDisplayName: 'You', multiProvider: enabled, defaultProvider }),
+  });
+  assert.equal(res.status, 200);
+}
+
 describe('Agent providers', () => {
   /** @type {import('puppeteer').Page} */
   let page;
@@ -63,6 +78,7 @@ describe('Agent providers', () => {
 
   beforeEach(async () => {
     await resetData();
+    await setMultiProvider(true);
     if (page) await closePage();
     page = await openPage();
     await createChat(page, 'Provider Chat');
@@ -166,6 +182,7 @@ describe('Agent providers that are not installed', () => {
 
   beforeEach(async () => {
     await resetData();
+    await setMultiProvider(true);
     if (page) await closePage();
     page = await openPage();
     await createChat(page, 'Provider Chat');
@@ -231,6 +248,7 @@ describe('Picking an opencode model from its list', () => {
 
   beforeEach(async () => {
     await resetData();
+    await setMultiProvider(true);
     if (page) await closePage();
     page = await openPage();
     await createChat(page, 'Provider Chat');

@@ -1630,6 +1630,41 @@ export async function setDefaultAutocompact(value) {
   setSetting('defaultAutocompact', value);
 }
 
+/**
+ * Whether multi-provider mode is on: agents can be created to run as a CLI
+ * other than Claude Code (opencode, Cursor). Off by default, since those
+ * providers come with no guarantees.
+ * @returns {boolean}
+ */
+export function getMultiProvider() {
+  return getSetting('multiProvider', 'false') === 'true';
+}
+
+/**
+ * @param {boolean} enabled
+ * @returns {Promise<void>}
+ */
+export async function setMultiProvider(enabled) {
+  setSetting('multiProvider', enabled ? 'true' : 'false');
+}
+
+/**
+ * The provider a new agent runs as when none is asked for, as chosen in
+ * Settings. Only applies in multi-provider mode (see providerPolicy.js).
+ * @returns {string}
+ */
+export function getDefaultProvider() {
+  return getSetting('defaultProvider', DEFAULT_PROVIDER_ID);
+}
+
+/**
+ * @param {string} providerId - A registered provider's id.
+ * @returns {Promise<void>}
+ */
+export async function setDefaultProvider(providerId) {
+  setSetting('defaultProvider', providerId);
+}
+
 // ─── Scheduled Messages ─────────────────────────────────────────────────────
 
 /**
