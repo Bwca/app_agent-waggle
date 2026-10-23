@@ -603,6 +603,21 @@ html[data-chat-header="collapsed"] #chat-header-expand-btn { display: block; }
 #note-save { padding: 7px 18px; border-radius: 7px; border: none; background: var(--blue); color: var(--bg0); font-size: 14px; font-weight: 600; cursor: pointer; transition: background .15s, opacity .15s; }
 #note-save:hover { background: var(--blue-hover); }
 
+#grants-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; z-index: 250; }
+#grants-modal { background: var(--bg1); border: 1px solid var(--bg3); border-radius: 12px; width: 560px; max-width: 95vw; max-height: 80vh; display: flex; flex-direction: column; box-shadow: 0 8px 32px rgba(0,0,0,.5); }
+#grants-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 15px; }
+#grants-close { background: none; border: none; color: var(--dim); font-size: 20px; cursor: pointer; line-height: 1; transition: color .15s; }
+#grants-close:hover { color: var(--red); }
+#grants-body { padding: 14px 18px 18px; overflow-y: auto; }
+#grants-hint, #grants-empty { margin: 0 0 12px; color: var(--muted); font-size: 13px; line-height: 1.4; }
+#grants-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.grants-item { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.grants-kind { color: var(--dim); font-size: 12px; flex-shrink: 0; width: 52px; }
+.grants-text { flex: 1; font-size: 12px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.grants-revoke-btn { padding: 4px 10px; border-radius: 6px; border: 1px solid var(--faint); background: transparent; color: var(--muted); font-size: 12px; cursor: pointer; flex-shrink: 0; transition: background .15s, color .15s; }
+.grants-revoke-btn:hover:not(:disabled) { color: var(--red); background: var(--bg2); }
+.grants-revoke-btn:disabled { opacity: .5; cursor: default; }
+
 /* ── Confirmation dialog ───────────────────────────────────────────── */
 #confirm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; z-index: 300; }
 #confirm-modal { background: var(--bg1); border: 1px solid var(--bg3); border-radius: 12px; width: 340px; max-width: 90vw; box-shadow: 0 8px 32px rgba(0,0,0,.5); padding: 18px; }

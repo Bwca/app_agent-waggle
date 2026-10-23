@@ -332,6 +332,21 @@
     </div>
   </div>
 
+  <!-- An agent's saved permissions (what its Grant clicks saved), each revocable -->
+  <div id="grants-overlay" data-testid="grants-overlay" hidden>
+    <div id="grants-modal">
+      <div id="grants-header">
+        <span id="grants-header-title" data-testid="grants-header-title" data-i18n="agent.grantsTitle">Saved permissions</span>
+        <button type="button" id="grants-close" data-testid="grants-close">×</button>
+      </div>
+      <div id="grants-body">
+        <p id="grants-hint" data-i18n="agent.grantsHint">Each Grant click saved one of these, and it stays until you revoke it.</p>
+        <p id="grants-empty" data-testid="grants-empty" data-i18n="agent.grantsEmpty" hidden>Nothing saved yet.</p>
+        <ul id="grants-list" data-testid="grants-list"></ul>
+      </div>
+    </div>
+  </div>
+
   <!-- Generic confirmation dialog, used for irreversible actions (delete chat/agent) -->
   <div id="confirm-overlay" data-testid="confirm-overlay" hidden>
     <div id="confirm-modal">

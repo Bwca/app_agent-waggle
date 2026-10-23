@@ -1147,6 +1147,28 @@ export async function grantAgentToolPattern(agentId, pattern) {
   return getAgent(agentId);
 }
 
+/**
+ * Removes one saved grant from an agent: a directory from extraAllowedPaths
+ * or a pattern from allowedToolPatterns, whichever is given. A no-op if the
+ * agent doesn't have it.
+ * @param {string} agentId
+ * @param {{ path?: string, pattern?: string }} grant
+ * @returns {Promise<Agent | null>}
+ */
+export async function revokeAgentGrant(agentId, { path, pattern }) {
+  const agent = getAgent(agentId);
+  if (!agent) return null;
+  if (path !== undefined) {
+    db.prepare('UPDATE agents SET extra_allowed_paths = ? WHERE id = ?')
+      .run(JSON.stringify((agent.extraAllowedPaths ?? []).filter((p) => p !== path)), agentId);
+  }
+  if (pattern !== undefined) {
+    db.prepare('UPDATE agents SET allowed_tool_patterns = ? WHERE id = ?')
+      .run(JSON.stringify((agent.allowedToolPatterns ?? []).filter((p) => p !== pattern)), agentId);
+  }
+  return getAgent(agentId);
+}
+
 // ─── Chats ─────────────────────────────────────────────────────────────────
 
 /**

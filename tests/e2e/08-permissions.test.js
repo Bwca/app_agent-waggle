@@ -428,4 +428,41 @@ describe('Permission grants', () => {
     const grantAllBtn = await page.$(tid('perm-grant-all-btn'));
     assert.equal(grantAllBtn, null, 'a single-row card should not show a bulk grant button');
   });
+
+  // Reported live: Grant on one `python3 -c 'print(...)'` saved
+  // `Bash(python3 -c:*)`, pre-approving every Python program, and nothing
+  // on the card or anywhere else showed it.
+  test('granting inline Python saves only that exact command, shown on the card and revocable', async () => {
+    const dir = agentDir('claudia');
+    await createChat(page, 'Exact Grant Test');
+    await createAgent(page, { name: 'Claudia', workingDir: dir, addToChat: true });
+
+    await sendMessage(page, `@Claudia use the Bash tool to run exactly: python3 -c 'open("made.txt", "w").write("ok")'`);
+    await waitForAgentResponse(page, { timeout: 30_000 });
+    await waitForPermCard();
+    const saves = await page.$$eval(tid('perm-saves'), (lines) => lines.map((l) => l.textContent));
+    assert.ok(
+      saves.some((line) => line.includes(`Bash(python3 -c 'open("made.txt", "w").write("ok")')`)),
+      `expected the card to name the exact rule, got: ${JSON.stringify(saves)}`,
+    );
+    assert.ok(!saves.some((line) => line.includes('python3 -c:*')), `no broad python3 prefix should be offered, got: ${JSON.stringify(saves)}`);
+
+    await grantRowForTool('Bash');
+    await waitForAgentResponse(page, { timeout: 30_000 });
+    assert.equal(readFileSync(join(dir, 'made.txt'), 'utf8'), 'ok', 'the exact command should have run on the auto-continued retry');
+
+    await page.click(tid('agent-menu-btn'));
+    await page.click(tid('agent-grants-btn'));
+    await page.waitForFunction(() => !document.querySelector('[data-testid="grants-overlay"]')?.hidden, { timeout: 3000 });
+    const items = await page.$$eval(tid('grants-item'), (lis) => lis.map((li) => li.querySelector('.grants-text').textContent));
+    assert.ok(items.some((text) => text.startsWith('Bash(python3 -c ')), `expected the saved rule to be listed, got: ${JSON.stringify(items)}`);
+
+    const before = items.length;
+    await page.$$eval(tid('grants-revoke-btn'), (btns) => btns.forEach((btn) => btn.click()));
+    await page.waitForFunction(() => !document.querySelector('[data-testid="grants-empty"]')?.hidden, { timeout: 15_000 });
+    const res = await fetch(`http://localhost:${TEST_PORT}/api/agents`);
+    const [agent] = await res.json();
+    assert.ok(before > 0);
+    assert.deepEqual(agent.allowedToolPatterns ?? [], [], 'every listed rule should be revoked server-side');
+  });
 });

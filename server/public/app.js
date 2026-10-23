@@ -235,6 +235,9 @@ let selectedUserColor = '#a6adc8';
 /** @type {string | null} id of the agent whose note the note modal is currently editing */
 let noteEditAgentId = null;
 
+/** @type {string | null} id of the agent whose saved permissions the grants modal is showing */
+let grantsAgentId = null;
+
 /**
  * @typedef {Object} Settings
  * @property {string} userDisplayName
@@ -676,6 +679,11 @@ const noteClose        = $('#note-close');
 const noteForm         = $('#note-form');
 const noteTextarea     = $('#note-textarea');
 const noteCancel       = $('#note-cancel');
+const grantsOverlay    = $('#grants-overlay');
+const grantsHeaderTitle = $('#grants-header-title');
+const grantsClose      = $('#grants-close');
+const grantsList       = $('#grants-list');
+const grantsEmpty      = $('#grants-empty');
 const confirmOverlay   = $('#confirm-overlay');
 const confirmMessage   = $('#confirm-message');
 const confirmCheckboxRow   = $('#confirm-checkbox-row');
@@ -1716,6 +1724,7 @@ function onAgentUpdated(updatedAgent) {
   const idx = agents.findIndex((a) => a.id === updatedAgent.id);
   if (idx !== -1) agents[idx] = updatedAgent;
   renderAgentPanel();
+  if (grantsAgentId === updatedAgent.id) renderGrantsModal();
 }
 
 /**
@@ -3423,6 +3432,7 @@ function renderAgentPanel() {
           <li><button class="agent-note-btn" data-testid="agent-note-btn">🗒 ${agent.note ? t('agent.editNoteTitle') : t('agent.addNoteTitle')}</button></li>
           <li><button class="agent-model-btn" data-testid="agent-model-btn">🧠 ${t('agent.switchModelTitle')}</button></li>
           ${display.autocompact ? `<li><button class="agent-autocompact-btn" data-testid="agent-autocompact-btn">🗜️ ${agent.autocompactOverride ? t('agent.autocompactTitle', { value: agent.autocompactOverride }) : t('agent.autocompactDefaultTitle', { value: effectiveDefaultAutocompact() })}</button></li>` : ''}
+          ${agent.dangerouslySkipPermissions ? '' : `<li><button class="agent-grants-btn" data-testid="agent-grants-btn">🔐 ${t('agent.grantsTitle')}</button></li>`}
           <li><button class="agent-open-folder-btn" data-testid="agent-open-folder-btn">📂 ${t('agent.openFolderTitle')}</button></li>
           <li><button class="agent-restart-btn" data-testid="agent-restart-btn" title="${t('agent.restartHint')}">🔄 ${t('agent.restartTitle')}</button></li>
           <li><button class="agent-remove-btn" data-testid="agent-remove-btn">× ${t('agent.removeFromChatTitle')}</button></li>
@@ -3441,6 +3451,7 @@ function renderAgentPanel() {
     li.querySelector('.agent-note-btn').addEventListener('click', () => { closeAgentMenu(); openNoteModal(agent); });
     li.querySelector('.agent-model-btn').addEventListener('click', () => { closeAgentMenu(); changeAgentModel(agent); });
     li.querySelector('.agent-autocompact-btn')?.addEventListener('click', () => { closeAgentMenu(); changeAgentAutocompact(agent); });
+    li.querySelector('.agent-grants-btn')?.addEventListener('click', () => { closeAgentMenu(); openGrantsModal(agent.id); });
     li.querySelector('.agent-open-folder-btn').addEventListener('click', () => { closeAgentMenu(); openAgentFolder(agent); });
     li.querySelector('.agent-restart-btn').addEventListener('click', () => { closeAgentMenu(); restartAgent(agent); });
     li.querySelector('.agent-remove-btn').addEventListener('click', () => { closeAgentMenu(); removeMember(agent.id); });
@@ -3496,6 +3507,62 @@ function openNoteModal(agent) {
   noteTextarea.value = agent.note ?? '';
   noteOverlay.hidden = false;
   noteTextarea.focus();
+}
+
+/**
+ * Opens the saved-permissions modal for an agent: every directory and tool
+ * pattern its Grant clicks have saved, each with a Revoke button. Re-rendered
+ * on every AGENT_UPDATED for the same agent while open, so a grant made or
+ * revoked elsewhere shows up here too.
+ * @param {string} agentId
+ * @returns {void}
+ */
+function openGrantsModal(agentId) {
+  grantsAgentId = agentId;
+  renderGrantsModal();
+  grantsOverlay.hidden = false;
+}
+
+function closeGrantsModal() {
+  grantsOverlay.hidden = true;
+  grantsAgentId = null;
+}
+
+function renderGrantsModal() {
+  const agent = agentById(grantsAgentId);
+  if (!agent) return closeGrantsModal();
+  grantsHeaderTitle.textContent = `${t('agent.grantsTitle')}: ${agent.name}`;
+  const grants = [
+    ...(agent.extraAllowedPaths ?? []).map((path) => ({ path, label: t('agent.grantsFolderLabel'), text: path })),
+    ...(agent.allowedToolPatterns ?? []).map((pattern) => ({ pattern, label: t('agent.grantsRuleLabel'), text: pattern })),
+  ];
+  grantsEmpty.hidden = grants.length > 0;
+  grantsList.innerHTML = '';
+  for (const grant of grants) {
+    const li = document.createElement('li');
+    li.className = 'grants-item';
+    li.dataset.testid = 'grants-item';
+    li.innerHTML = `
+      <span class="grants-kind">${escHtml(grant.label)}</span>
+      <code class="grants-text" title="${escHtml(grant.text)}">${escHtml(grant.text)}</code>
+      <button class="grants-revoke-btn" data-testid="grants-revoke-btn">${t('agent.revokeGrantBtn')}</button>`;
+    const revokeBtn = li.querySelector('.grants-revoke-btn');
+    revokeBtn.addEventListener('click', async () => {
+      revokeBtn.disabled = true;
+      const res = await fetch(`/api/agents/${agent.id}/grants`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(grant.path !== undefined ? { path: grant.path } : { pattern: grant.pattern }),
+      });
+      if (res.ok) {
+        const updated = /** @type {Agent} */ (await res.json());
+        const idx = agents.findIndex((a) => a.id === agent.id);
+        if (idx !== -1) agents[idx] = updated;
+      }
+      if (grantsAgentId === agent.id) renderGrantsModal();
+    });
+    grantsList.appendChild(li);
+  }
 }
 
 function closeNoteModal() {
@@ -5326,6 +5393,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   closeDrawer();
   closeImageLightbox();
+  if (!grantsOverlay.hidden) closeGrantsModal();
 });
 
 /**
@@ -5390,6 +5458,9 @@ noteClose.addEventListener('click', closeNoteModal);
 noteCancel.addEventListener('click', closeNoteModal);
 noteOverlay.addEventListener('click', (e) => { if (e.target === noteOverlay) closeNoteModal(); });
 noteForm.addEventListener('submit', handleNoteFormSubmit);
+
+grantsClose.addEventListener('click', closeGrantsModal);
+grantsOverlay.addEventListener('click', (e) => { if (e.target === grantsOverlay) closeGrantsModal(); });
 
 // ─── Bootstrap ────────────────────────────────────────────────────────────────
 

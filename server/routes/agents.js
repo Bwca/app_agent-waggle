@@ -9,12 +9,12 @@ import { Router } from 'express';
 import { spawn } from 'child_process';
 import { existsSync } from 'fs';
 import { v4 as uuidv4 } from 'uuid';
-import { getAgents, getAgent, getAgentChatId, getChat, createAgent, updateAgent, deleteAgent } from '../store/db.js';
+import { getAgents, getAgent, getAgentChatId, getChat, createAgent, updateAgent, deleteAgent, revokeAgentGrant } from '../store/db.js';
 import { verifyProviderAvailable } from '../services/agentRunner.js';
 import { DEFAULT_PROVIDER_ID, getProvider, hasProvider, providerForAgent } from '../services/providers/index.js';
 import { killAgent, getAgentSkills, spawnForAgent } from '../services/agentProcessManager.js';
 import { listAgentCommands, mergeSkills } from '../services/commands.js';
-import { postAgentRemovedNote } from '../ws/handler.js';
+import { broadcast, postAgentRemovedNote } from '../ws/handler.js';
 import { normalizeAutocompact } from '../public/autocompact.js';
 import { t } from '../i18n/t.js';
 import { logger } from '../logger.js';
@@ -225,6 +225,30 @@ export default function createAgentsRouter(wss) {
     await killAgent(agent.id);
     spawnForAgent(agent);
     res.json({ ok: true });
+  });
+
+  /**
+   * DELETE /api/agents/:id/grants
+   * Revokes one permission saved by a Grant click: `{ path }` for a granted
+   * directory, `{ pattern }` for a granted tool pattern. Both are spawn
+   * flags for Claude, so the agent's process is restarted (after any turn
+   * in progress) and the next turn resumes without the grant.
+   * @param {string} [req.body.path]
+   * @param {string} [req.body.pattern]
+   */
+  router.delete('/:id/grants', async (req, res) => {
+    const { path, pattern } = req.body ?? {};
+    if (typeof path !== 'string' && typeof pattern !== 'string') {
+      return res.status(400).json({ error: t('errors.grantRequired') });
+    }
+    const agent = await revokeAgentGrant(req.params.id, {
+      path: typeof path === 'string' ? path : undefined,
+      pattern: typeof pattern === 'string' ? pattern : undefined,
+    });
+    if (!agent) return res.status(404).json({ error: t('errors.agentNotFound') });
+    await killAgent(agent.id);
+    broadcast(wss, { type: 'AGENT_UPDATED', agent });
+    res.json(agent);
   });
 
   /**
