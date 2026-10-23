@@ -765,7 +765,9 @@ function runOneTurn(proc, content, { onChunk, onStatus, signal }) {
         // otherwise just silently no-op once the process actually exits a
         // moment later, and the caller would be left with `finish()`'s
         // empty-string "success" instead of ever seeing the real error.
-        if (turn.errorMessage) {
+        // A stopped turn can end with one too (the interrupt cancelling the
+        // request), which is the stop itself, not something that went wrong.
+        if (turn.errorMessage && !stopped) {
           fail(t('errors.agentExecutionError', { provider: provider.displayName, message: turn.errorMessage }));
           return;
         }
@@ -782,8 +784,10 @@ function runOneTurn(proc, content, { onChunk, onStatus, signal }) {
         if (settled) return;
         // The process died mid-turn with nothing captured yet (a crash,
         // not a graceful interrupt-then-exit, which already resolved via
-        // the 'result' event above before this ever fires).
-        if (code !== 0 && !turn.resultText && !turn.fullText) {
+        // the 'result' event above before this ever fires). Unless the user
+        // stopped it: the interrupt exits non-zero too, and a stop before
+        // any reply text is still just a stopped turn, not a crash.
+        if (code !== 0 && !stopped && !turn.resultText && !turn.fullText) {
           settled = true;
           if (signal) signal.removeEventListener('abort', killForStop);
           reject(new Error(t('errors.agentExitCode', { provider: provider.displayName, code })));

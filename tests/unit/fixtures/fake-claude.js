@@ -11,6 +11,9 @@
  * reply text (see "{turn}" below), and FAKE_CLAUDE_PROMPT_DIR records each turn's stdin line as
  * `<cwd basename>-<turn number>.json` there. FAKE_CLAUDE_ARGS_DIR records
  * this process's command-line arguments as `<cwd basename>-<pid>.json`.
+ * SIGINT (a stop) ends a turn in progress the way CLI 2.1.301 does, with an
+ * is_error result and exit code 0; FAKE_CLAUDE_SIGINT_EXIT_CODE makes it
+ * exit with that code instead, without a result, like a CLI that just dies.
  */
 
 import { writeFileSync } from 'node:fs';
@@ -19,6 +22,8 @@ import { basename, join } from 'node:path';
 const replyDelayMs = Number(process.env.FAKE_CLAUDE_REPLY_DELAY_MS) || 0;
 const promptDir = process.env.FAKE_CLAUDE_PROMPT_DIR;
 let turnNumber = 0;
+/** The reply timer of the turn in progress, if any. */
+let pendingReply = null;
 if (process.env.FAKE_CLAUDE_ARGS_DIR) {
   writeFileSync(join(process.env.FAKE_CLAUDE_ARGS_DIR, `${basename(process.cwd())}-${process.pid}.json`), JSON.stringify(process.argv.slice(2)));
 }
@@ -60,7 +65,8 @@ process.stdin.on('data', (chunk) => {
       continue;
     }
     emit({ type: 'system', subtype: 'init' });
-    setTimeout(() => {
+    pendingReply = setTimeout(() => {
+      pendingReply = null;
       emit({ type: 'assistant', message: { id: `m${Date.now()}-${turnNumber}`, model: 'fake', content: [{ type: 'text', text: reply }] } });
       emit({ type: 'result', is_error: false, result: reply });
     }, replyDelayMs);
@@ -68,3 +74,12 @@ process.stdin.on('data', (chunk) => {
 });
 
 process.on('SIGTERM', () => setTimeout(() => process.exit(143), 300));
+process.on('SIGINT', () => {
+  const exitCode = process.env.FAKE_CLAUDE_SIGINT_EXIT_CODE;
+  if (exitCode) process.exit(Number(exitCode));
+  if (pendingReply) {
+    clearTimeout(pendingReply);
+    emit({ type: 'result', subtype: 'error_during_execution', is_error: true, errors: ['[ede_diagnostic] result_type=user last_content_type=n/a stop_reason=null'] });
+  }
+  process.exit(0);
+});
