@@ -3862,6 +3862,11 @@ async function selectChat(id, opts = {}) {
   messageList.innerHTML = '';
   renderTypingBar();
 
+  // Starts this chat's agents now, while the user reads, rather than at
+  // their first message. Nothing is started at server startup (see the
+  // route's docs), and a failure here only means a cold first turn.
+  fetch(`/api/chats/${id}/warm`, { method: 'POST' }).catch(() => {});
+
   // Lands on the latest page and (since that's always where 'last' lands)
   // reattaches any stream still running in this chat — e.g. the user asked
   // something, switched away before/while the agent replied, and has now
