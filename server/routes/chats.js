@@ -199,6 +199,25 @@ export default function createChatsRouter(wss) {
   });
 
   /**
+   * POST /api/chats/:id/warm
+   * Spawns a persistent process for every member that doesn't have one yet,
+   * so the agents are already warm by the time the user writes. The browser
+   * calls this whenever a chat is opened. Nothing is spawned at server
+   * startup: resuming every member of every chat at once, each loading its
+   * whole session file and starting its own MCP servers, kept the machine
+   * busy for a long time after every restart.
+   */
+  router.post('/:id/warm', (req, res) => {
+    const chat = getChat(req.params.id);
+    if (!chat) return res.status(404).json({ error: t('errors.chatNotFound') });
+    for (const agentId of chat.memberAgentIds) {
+      const agent = getAgent(agentId);
+      if (agent) spawnForAgent(agent);
+    }
+    res.status(204).end();
+  });
+
+  /**
    * POST /api/chats/:id/members
    * Adds an agent to a chat.
    * @param {Object} req.body
