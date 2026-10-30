@@ -8,7 +8,7 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import express from 'express';
 import { WebSocketServer } from 'ws';
-import { loadDb, resetAll, getChats, getAgent, getDefaultAutocompact } from './store/db.js';
+import { loadDb, resetAll, getDefaultAutocompact } from './store/db.js';
 import createAgentsRouter from './routes/agents.js';
 import createChatsRouter from './routes/chats.js';
 import browseRouter from './routes/browse.js';
@@ -18,7 +18,7 @@ import quickMessagesRouter from './routes/quickMessages.js';
 import { mountMcp } from './mcp/index.js';
 import { handleConnection } from './ws/handler.js';
 import { initScheduler } from './services/scheduler.js';
-import { spawnForAgent, killAll, setAutocompactDefault } from './services/agentProcessManager.js';
+import { killAll, setAutocompactDefault } from './services/agentProcessManager.js';
 import { logger } from './logger.js';
 import { APP_NAME } from './public/appName.js';
 
@@ -98,22 +98,6 @@ app.delete('/__reset', async (_req, res) => {
 });
 
 /**
- * Re-arms a persistent process for every agent already in a chat — mirrors
- * initScheduler's re-arm-at-startup pattern. Live processes are purely
- * in-memory, so a restart would otherwise silently leave every agent
- * "lazy" again until its next message despite having been eagerly spawned
- * before the restart.
- * @returns {void}
- */
-function initAgentProcesses() {
-  const memberIds = new Set(getChats().flatMap((c) => c.memberAgentIds));
-  for (const agentId of memberIds) {
-    const agent = getAgent(agentId);
-    if (agent) spawnForAgent(agent);
-  }
-}
-
-/**
  * Kills every live agent process before the Node process itself exits.
  * Necessary now that agents can have long-lived children: `spawn()`
  * doesn't put them in their own process group, so a plain `kill <pid>` on
@@ -132,10 +116,9 @@ process.on('SIGTERM', gracefulShutdown);
 process.on('SIGINT', gracefulShutdown);
 
 await loadDb();
-// Before initAgentProcesses, so the processes it re-arms start with it.
+// Before any agent process is spawned, so each one starts with it.
 setAutocompactDefault(getDefaultAutocompact());
 initScheduler(wss);
-initAgentProcesses();
 // Bound explicitly to loopback: agents can execute real shell/file tools
 // against the host filesystem, so this must never be reachable from the
 // network, regardless of the host's firewall configuration.

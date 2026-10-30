@@ -10,7 +10,8 @@
 
 import { test, describe, before, after, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { execSync } from 'node:child_process';
 import { join } from 'node:path';
 import { startServer, stopServer, resetData } from '../helpers/server.js';
@@ -193,5 +194,47 @@ describe('Persistent agent processes', () => {
     // eventually reaps it.
     await stopServer();
     await waitForProcessCount(dir, 0);
+  });
+});
+
+describe('Persistent agent processes after a restart', () => {
+  /** @type {import('puppeteer').Page} */
+  let page;
+  // A file database, unlike every other suite's :memory: one, so the chat
+  // and its member are still there once the server comes back up.
+  const dbDir = mkdtempSync(join(tmpdir(), 'agentwaggle-e2e-db-'));
+  const dbEnv = { APP_DB_FILE: join(dbDir, 'data.sqlite3') };
+
+  before(async () => {
+    await startServer(dbEnv);
+    await launchBrowser();
+    page = await openPage();
+  });
+
+  after(async () => {
+    await closeBrowser();
+    await stopServer();
+    cleanupAgentDirs();
+    rmSync(dbDir, { recursive: true, force: true });
+  });
+
+  test('a restart spawns no processes until a chat is opened, then spawns only its members', async () => {
+    const dir = agentDir('claudia');
+    await createChat(page, 'Restart Test');
+    await createAgent(page, { name: 'Claudia', workingDir: dir, addToChat: true });
+    await waitForProcessCount(dir, 1);
+    await closePage();
+
+    await stopServer();
+    await waitForProcessCount(dir, 0);
+    await startServer(dbEnv);
+
+    // A fresh page has no active chat, so nothing has asked for Claudia yet.
+    page = await openPage();
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    assert.equal(liveClaudeProcessCount(dir), 0, 'no agent process should start until its chat is opened');
+
+    await page.click(tid('chat-item'));
+    await waitForProcessCount(dir, 1);
   });
 });
